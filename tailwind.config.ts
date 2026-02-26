@@ -8,9 +8,7 @@ export default {
     container: {
       center: true,
       padding: "2rem",
-      screens: {
-        "2xl": "1400px",
-      },
+      screens: { "2xl": "1400px" },
     },
     extend: {
       colors: {
@@ -57,6 +55,23 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+        amber: {
+          DEFAULT: "hsl(var(--fire-amber))",
+          fire: "hsl(var(--fire-orange))",
+        },
+        garden: {
+          DEFAULT: "hsl(var(--garden-green))",
+          light: "hsl(var(--garden-green-light))",
+        },
+        charcoal: {
+          DEFAULT: "hsl(var(--charcoal))",
+          light: "hsl(var(--charcoal-light))",
+        },
+        cream: "hsl(var(--cream))",
+      },
+      fontFamily: {
+        display: ['Oswald', 'sans-serif'],
+        body: ['Inter', 'sans-serif'],
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -64,26 +79,30 @@ export default {
         sm: "calc(var(--radius) - 4px)",
       },
       keyframes: {
-        "accordion-down": {
-          from: {
-            height: "0",
-          },
-          to: {
-            height: "var(--radix-accordion-content-height)",
-          },
+        "accordion-down": { from: { height: "0" }, to: { height: "var(--radix-accordion-content-height)" } },
+        "accordion-up": { from: { height: "var(--radix-accordion-content-height)" }, to: { height: "0" } },
+        "fade-up": { from: { opacity: "0", transform: "translateY(30px)" }, to: { opacity: "1", transform: "translateY(0)" } },
+        "fade-in": { from: { opacity: "0" }, to: { opacity: "1" } },
+        "pulse-amber": {
+          "0%, 100%": { boxShadow: "0 0 20px hsl(32 95% 52% / 0.4)" },
+          "50%": { boxShadow: "0 0 40px hsl(32 95% 52% / 0.8)" },
         },
-        "accordion-up": {
-          from: {
-            height: "var(--radix-accordion-content-height)",
-          },
-          to: {
-            height: "0",
-          },
+        "float": {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-8px)" },
+        },
+        "shimmer": {
+          "0%": { backgroundPosition: "-200% 0" },
+          "100%": { backgroundPosition: "200% 0" },
         },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "fade-up": "fade-up 0.7s ease-out forwards",
+        "fade-in": "fade-in 0.5s ease-out forwards",
+        "pulse-amber": "pulse-amber 2.5s ease-in-out infinite",
+        "float": "float 3s ease-in-out infinite",
       },
     },
   },

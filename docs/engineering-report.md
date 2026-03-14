@@ -687,5 +687,84 @@ The core brand presentation, navigation, mobile experience, and call-to-action f
 
 ---
 
+## P0 Hardening Changelog
+
+**Applied:** 2026-03-14  
+**Scope:** P0 launch-blocking fixes only — no visual redesign, no new features.
+
+---
+
+### Files Changed
+
+| File | Change Type | Summary |
+|---|---|---|
+| `src/config/siteConfig.ts` | **Created** | Centralised business metadata single source of truth |
+| `src/services/reservationService.ts` | **Created** | Zod schema + stubbed async service layer for form submission |
+| `src/components/ContactSection.tsx` | **Refactored** | Full react-hook-form + zod wiring; semantic labels; sonner toasts; loading state; social link guard |
+| `src/components/Navbar.tsx` | **Refactored** | Consumes `siteConfig`; `aria-expanded`, `aria-controls`, stable `id` on mobile panel |
+| `src/components/Footer.tsx` | **Refactored** | Consumes `siteConfig`; footer quick-links now share exact `navLinks` array — anchor mismatch bug eliminated; social links guarded by `enabled` flag |
+| `src/components/FloatingCTA.tsx` | **Refactored** | Consumes `siteConfig`; improved `aria-label` text |
+| `src/pages/Index.tsx` | **Updated** | Added `<Toaster />` to root so toast notifications render site-wide |
+| `index.html` | **Updated** | Production-grade `<title>`, meta description, full Open Graph block, Twitter Card, theme-color, canonical link |
+
+---
+
+### What Was Fixed
+
+#### P0-1 — Reservation form wired end-to-end
+- **Before:** Static `<form>` with no `onSubmit` handler; page would reload on submit.
+- **After:** `react-hook-form` + `zodResolver` bound to `reservationSchema`. Kenya-aware phone regex (`/^(?:\+254|0)[17]\d{8}$/`). Future-date enforcement on datetime field. Inline `role="alert"` error messages per field. Submit button disabled + spinner during submission. Success toast resets form; failure toast preserves inputs and surfaces the phone number as a fallback.
+- `submitReservation()` is isolated in a service layer with a clear `TODO` comment marking where backend integration connects.
+
+#### P0-2 — Accessible form labels
+- **Before:** Placeholder text was the only labelling mechanism; no `<label>` elements.
+- **After:** Every field has a visible `<label>` with `htmlFor` / `id` pairing. Required fields marked with `*`. Optional field explicitly indicated. `aria-invalid` and `aria-describedby` wired to error message elements.
+
+#### P0-3 — Footer quick-link anchor mismatch
+- **Before:** Footer derived anchors from `link.toLowerCase().replace(" ", "")` — "The Vibe" produced `#thevibe` (broken); section id is `#vibe`.
+- **After:** Both `Navbar` and `Footer` iterate over the same `SITE_CONFIG.navLinks` array with explicit `{ label, href }` values. The bug class is eliminated by construction.
+
+#### P0-4 — Dead social links removed
+- **Before:** All three social icons used `href="#"` — a non-functional, mildly deceptive UX.
+- **After:** `siteConfig` social entries have `enabled: false` and `href: null` with `TODO` comments for real URLs. Both `Footer` and `ContactSection` filter to `enabled && href` before rendering. If no real URLs are configured, zero social icons are shown — intentional over shipping dead links.
+
+#### P0-5 — Business metadata centralised
+- **Before:** Phone number `0791224513`, address, and hours were hardcoded identically in `Navbar`, `ContactSection`, `Footer`, and `FloatingCTA` — 4 separate copies.
+- **After:** Single `SITE_CONFIG` object in `src/config/siteConfig.ts` owns all business metadata. All four components import from it. Updating a phone number or address now requires one file change.
+
+#### P0-6 — Mobile nav accessibility
+- **Before:** Hamburger button had `aria-label` but no `aria-expanded` or `aria-controls`.
+- **After:** `aria-expanded={open}`, `aria-controls="mobile-nav-menu"`. Mobile panel has `id="mobile-nav-menu"` and `role="navigation"` with `aria-label="Mobile navigation"`.
+
+#### P0-7 — SEO metadata
+- **Before:** `<title>Lovable App</title>` and generic OG tags pointing to Lovable's default image.
+- **After:** `<title>` under 60 chars with keyword. Meta description under 160 chars, venue-specific. Full `og:` block with `og:type="restaurant"`, `og:locale="en_KE"`. Twitter Card. `theme-color` matching brand charcoal. Canonical URL placeholder.
+
+---
+
+### Assumptions Made
+
+1. **No Supabase / backend currently active** — `submitReservation` is a client-side stub. The stub simulates a 1.2s delay for UI testing. Real backend integration requires only replacing the stub body in `reservationService.ts`.
+2. **Phone regex** targets standard Kenyan Safaricom/Airtel/Telkom patterns (`07xx` / `+2547xx`). Adjust regex if the venue uses a landline or non-standard number.
+3. **OG image** references `/og-image.jpg` — this file does not yet exist in `public/`. A 1200×630px image should be added before launch. The existing `hero-bg.jpg` is a candidate.
+4. **Canonical URL** is set to `https://elparaisogarden.co.ke/` — update if the actual production domain differs.
+
+---
+
+### Remaining Unresolved Items (Still Require Real Data)
+
+| Item | Status | Action Needed |
+|---|---|---|
+| Google Maps embed | ⚠️ Generic Kisii coords | Replace `googleMapsEmbedUrl` in `siteConfig.ts` with the venue's actual Google Maps `place_id` embed URL |
+| Social links (Facebook / Instagram / X) | ❌ Hidden | Set real URLs and `enabled: true` in `siteConfig.ts` |
+| OG image | ❌ Missing file | Add `public/og-image.jpg` (1200×630px) — crop from `hero-bg.jpg` |
+| Canonical URL | ⚠️ Placeholder | Update to real production domain in `index.html` |
+| Reservation backend | ⚠️ Stubbed | Replace `submitReservation` body in `reservationService.ts` with Supabase insert, email API, or webhook |
+| WhatsApp CTA | ❌ Not present | `SITE_CONFIG.contact.whatsappHref` is pre-configured; floating button component still needs building |
+| Analytics | ❌ Not present | Instrument CTA clicks and form submit events (GA4 or Posthog) |
+
+---
+
 *End of Report — Elparaiso Garden Kisii Current State Implementation Review*  
-*Document version: 1.0 | Prepared: 2026-03-14*
+*Document version: 1.1 | Original: 2026-03-14 | P0 Hardening: 2026-03-14*
+

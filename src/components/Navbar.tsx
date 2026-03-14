@@ -1,13 +1,8 @@
 import { useState, useEffect } from "react";
 import { Menu, X, Phone } from "lucide-react";
+import { SITE_CONFIG } from "@/config/siteConfig";
 
-const navLinks = [
-  { label: "Home", href: "#home" },
-  { label: "The Vibe", href: "#vibe" },
-  { label: "Menu", href: "#menu" },
-  { label: "Reviews", href: "#reviews" },
-  { label: "Contact", href: "#contact" },
-];
+const MOBILE_MENU_ID = "mobile-nav-menu";
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
@@ -32,16 +27,16 @@ export default function Navbar() {
           {/* Logo */}
           <a href="#home" className="flex flex-col leading-tight group">
             <span className="font-display text-xl md:text-2xl font-bold text-gradient-fire tracking-wider">
-              ELPARAISO
+              {SITE_CONFIG.business.shortName}
             </span>
             <span className="font-display text-xs md:text-sm text-garden-light tracking-[0.25em] uppercase">
-              Garden Kisii
+              {SITE_CONFIG.business.tagline}
             </span>
           </a>
 
           {/* Desktop Links */}
           <div className="hidden md:flex items-center gap-8">
-            {navLinks.map((link) => (
+            {SITE_CONFIG.navLinks.map((link) => (
               <a
                 key={link.label}
                 href={link.href}
@@ -51,7 +46,7 @@ export default function Navbar() {
               </a>
             ))}
             <a
-              href="tel:0791224513"
+              href={SITE_CONFIG.contact.phoneTelHref}
               className="flex items-center gap-2 bg-gradient-fire text-primary-foreground font-display text-sm tracking-widest px-5 py-2.5 rounded-full hover:opacity-90 transition-opacity shadow-amber"
             >
               <Phone size={14} />
@@ -63,7 +58,9 @@ export default function Navbar() {
           <button
             onClick={() => setOpen(!open)}
             className="md:hidden text-foreground p-2"
-            aria-label="Toggle menu"
+            aria-label={open ? "Close menu" : "Open menu"}
+            aria-expanded={open}
+            aria-controls={MOBILE_MENU_ID}
           >
             {open ? <X size={24} /> : <Menu size={24} />}
           </button>
@@ -72,9 +69,14 @@ export default function Navbar() {
 
       {/* Mobile Menu */}
       {open && (
-        <div className="md:hidden bg-charcoal/98 backdrop-blur-md border-b border-border">
+        <div
+          id={MOBILE_MENU_ID}
+          className="md:hidden bg-charcoal/98 backdrop-blur-md border-b border-border"
+          role="navigation"
+          aria-label="Mobile navigation"
+        >
           <div className="px-4 py-4 flex flex-col gap-4">
-            {navLinks.map((link) => (
+            {SITE_CONFIG.navLinks.map((link) => (
               <a
                 key={link.label}
                 href={link.href}
@@ -85,11 +87,11 @@ export default function Navbar() {
               </a>
             ))}
             <a
-              href="tel:0791224513"
+              href={SITE_CONFIG.contact.phoneTelHref}
               className="flex items-center justify-center gap-2 bg-gradient-fire text-primary-foreground font-display text-sm tracking-widest px-5 py-3 rounded-full mt-2"
             >
               <Phone size={14} />
-              Call Now — 0791 224513
+              Call Now — {SITE_CONFIG.contact.phoneDisplay}
             </a>
           </div>
         </div>

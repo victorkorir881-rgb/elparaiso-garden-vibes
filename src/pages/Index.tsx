@@ -7,6 +7,7 @@ import AmenitiesSection from "@/components/AmenitiesSection";
 import ContactSection from "@/components/ContactSection";
 import Footer from "@/components/Footer";
 import FloatingCTA from "@/components/FloatingCTA";
+import { Toaster } from "@/components/ui/toaster";
 
 export default function Index() {
   return (
@@ -20,6 +21,7 @@ export default function Index() {
       <ContactSection />
       <Footer />
       <FloatingCTA />
+      <Toaster />
     </div>
   );
 }

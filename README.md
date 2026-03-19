@@ -1,147 +1,131 @@
-# Elparaiso Garden Vibes
+# 🌿 Elparaiso Garden Vibes
 
-A modern, responsive landing page for **Elparaiso Garden Kisii** — a 24/7 chill spot in Kisii, Kenya featuring great food, nyama choma, mutura, cocktails, music, garden vibes, and a unique **car wash & dine** experience.
+<p align="center">
+  <strong>A modern, responsive business website for Elparaiso Garden Kisii</strong><br/>
+  A premium restaurant & lifestyle landing page built with React, TypeScript, Vite, Tailwind CSS, and shadcn/ui.
+</p>
 
-**Live Site:** https://elparaisogardens.vercel.app/  
-**Repository:** https://github.com/victorkorir881-rgb/elparaiso-garden-vibes
-
----
-
-## Overview
-
-**Elparaiso Garden Vibes** is a production-ready React + TypeScript marketing website built for **Elparaiso Garden Kisii**.
-
-The site is designed to:
-- Showcase the venue’s brand and atmosphere
-- Highlight signature menu items
-- Display amenities and social proof
-- Help guests quickly **call**, **reserve**, or **visit**
-- Provide a polished mobile-first experience for local customers
-
-This project uses a clean single-page layout with anchored navigation and strong call-to-actions tailored for a hospitality/nightlife/restaurant business.
+<p align="center">
+  <a href="https://elparaisogardens.vercel.app/" target="_blank">
+    <img src="https://img.shields.io/badge/Live%20Site-Vercel-000?style=for-the-badge&logo=vercel" alt="Live Site" />
+  </a>
+  <a href="https://github.com/victorkorir881-rgb/elparaiso-garden-vibes" target="_blank">
+    <img src="https://img.shields.io/badge/Source%20Code-GitHub-181717?style=for-the-badge&logo=github" alt="GitHub Repo" />
+  </a>
+  <img src="https://img.shields.io/badge/React-18-blue?style=for-the-badge&logo=react" alt="React 18" />
+  <img src="https://img.shields.io/badge/TypeScript-Strict-3178C6?style=for-the-badge&logo=typescript" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/TailwindCSS-UI-06B6D4?style=for-the-badge&logo=tailwindcss" alt="Tailwind CSS" />
+</p>
 
 ---
 
-## Business Details
+## 📌 Overview
 
+**Elparaiso Garden Vibes** is a polished, mobile-first, single-page business website built for **Elparaiso Garden Kisii** — a vibrant 24/7 chill spot in Kisii, Kenya.
+
+The website is designed to:
+- attract local customers
+- showcase the venue’s atmosphere and signature offerings
+- highlight amenities and social proof
+- encourage fast mobile conversion through **call**, **reserve**, and **visit** actions
+- present the brand as modern, premium, and trustworthy
+
+It blends a **restaurant/nightlife aesthetic** with strong UX patterns tailored for local hospitality businesses.
+
+---
+
+## 🌍 Live Project
+
+- **Live Site:** https://elparaisogardens.vercel.app/
+- **Repository:** https://github.com/victorkorir881-rgb/elparaiso-garden-vibes
+
+---
+
+## 🏢 Business Context
+
+This project is built for:
+
+### **Elparaiso Garden Kisii**
+A lifestyle restaurant and entertainment destination in **Kisii, Kenya**, offering:
+- great food
+- nyama choma
+- mutura
+- drinks & cocktails
+- garden ambiance
+- live vibes
+- car wash & dine convenience
+- 24-hour availability
+
+### Key Business Details
 - **Business Name:** Elparaiso Garden Kisii
 - **Brand Name:** ELPARAISO
-- **Tagline:** Garden Kisii
-- **Description:** The ultimate chill spot in Kisii. Great food, cool music, and good vibes—open 24 hours.
 - **Hours:** Open 24/7
+- **Location:** County Government Street, Kisii
 - **Phone:** `0791 224513`
-- **Call Link:** `tel:0791224513`
-- **WhatsApp:** `https://wa.me/254791224513`
-- **Address:** County Government Street, Kisii
-- **Plus Code:** `8QCF+4R Kisii, Kenya`
-- **City:** Kisii
-- **Country:** Kenya
+- **WhatsApp:** `+254 791 224513`
 
-> All core business metadata is centralized in:
->
+> Business metadata is centralized in:  
 > `src/config/siteConfig.ts`
 
 ---
 
-## Features
+## ✨ Features
 
-### Core Website Sections
-- **Sticky Navbar**
-  - Desktop + mobile menu
-  - Smooth anchor navigation
-  - Quick “Call Now” action
-
-- **Hero Section**
-  - Strong brand-first landing experience
-  - 24-hour badge
-  - Primary CTAs:
-    - Make a Reservation
-    - View Menu Highlights
-
-- **The Vibe / Experience Section**
-  - Highlights the Elparaiso atmosphere
-  - Promotes:
-    - Dine-In
-    - Takeaway
-    - Delivery
-    - Drive-Through
-  - Features the unique **Car Wash & Dine Experience**
-
-- **Menu Highlights Section**
-  - Signature offerings:
-    - Great Choma
-    - Delicious Mutura
-    - Drinks & Cocktails
-  - Includes pricing ranges and service options
-
-- **Guest Reviews Section**
-  - Curated testimonial cards
-  - Mobile review carousel
-  - “Based on Google Reviews” style social proof
-
-- **Amenities & Features Section**
-  - Open 24 Hours
-  - Wheelchair Accessible
-  - Free Ample Parking
-  - NFC & Card Payments
-  - Full Table Service
-  - Reservations Accepted
-  - Live Music & DJ
-  - Garden Atmosphere
-
-- **Contact + Reservation Section**
-  - Contact details
-  - Embedded Google Map
-  - Reservation form with validation
-
-- **Footer**
-  - Quick links
-  - Contact info
-  - Brand summary
-  - Optional social links (hidden until configured)
-
-- **Floating CTA**
-  - Persistent mobile-friendly action buttons
-  - Call Now
-  - Reserve
+### Core Website Experience
+- ✅ Sticky responsive navigation bar
+- ✅ Mobile hamburger menu
+- ✅ Smooth-scroll section navigation
+- ✅ Branded hero section with strong CTA hierarchy
+- ✅ “24 Hours” business positioning
+- ✅ Signature vibe / brand experience section
+- ✅ Menu highlights with featured items
+- ✅ Social proof / reviews section
+- ✅ Amenities & service features
+- ✅ Contact section with map embed
+- ✅ Reservation form with validation
+- ✅ Floating call-to-action buttons
+- ✅ Mobile-first layout and responsive design
+- ✅ Dark premium visual theme with warm accent colors
 
 ---
 
-## Reservation Form (Important)
+## 🧩 Main Sections
 
-The reservation form is **fully built on the frontend** and includes validation using **Zod + React Hook Form**, but:
+The homepage is structured as a modern single-page experience:
 
-> ⚠️ **It is NOT connected to a real backend yet.**
-
-### Current status
-The form currently uses a **client-side async stub** in:
-
-`src/services/reservationService.ts`
-
-It simulates a network request for UI testing purposes.
-
-### Validation rules currently implemented
-- **Name:** 2–100 characters
-- **Phone:** Valid Kenyan number only  
-  Accepted formats:
-  - `07XXXXXXXX`
-  - `+2547XXXXXXXX`
-- **Date & Time:** Must be in the future
-- **Notes:** Optional, max 500 characters
-
-### Recommended production integrations
-Replace the current stub with one of these:
-- **Supabase** (recommended)
-- **Resend / Email API**
-- **EmailJS**
-- **WhatsApp Business API**
-- **Webhook / custom backend endpoint**
+1. **Navbar**
+2. **Hero Section**
+3. **The Vibe / Experience**
+4. **Menu Highlights**
+5. **Reviews / Testimonials**
+6. **Amenities**
+7. **Contact + Reservation**
+8. **Footer**
+9. **Floating CTA**
 
 ---
 
-## Tech Stack
+## 🍽️ What the Site Promotes
 
-This project is built with:
+### Service Modes
+- Dine-In
+- Takeaway
+- Delivery
+- Drive-Through
+
+### Signature Highlights
+- Great Choma
+- Delicious Mutura
+- Drinks & Cocktails
+- Garden Atmosphere
+- Live Music / DJ energy
+- Car Wash & Dine Experience
+
+---
+
+## 🛠️ Tech Stack
+
+This project is built using:
 
 - **Vite**
 - **React 18**
@@ -149,9 +133,9 @@ This project is built with:
 - **Tailwind CSS**
 - **shadcn/ui**
 - **Radix UI**
+- **React Router DOM**
 - **React Hook Form**
 - **Zod**
-- **React Router DOM**
 - **TanStack React Query**
 - **Lucide React**
 - **Vitest**
@@ -159,12 +143,12 @@ This project is built with:
 
 ---
 
-## Project Structure
+## 📁 Project Structure
 
-```bash
+```bash id="5r7q1x"
 elparaiso-garden-vibes/
-├── docs/                      # Project docs / supporting documentation
-├── public/                    # Static public assets (robots.txt, etc.)
+├── docs/                      # Supporting documentation
+├── public/                    # Static assets (robots.txt, etc.)
 ├── src/
 │   ├── assets/                # Images and media assets
 │   ├── components/
@@ -179,9 +163,8 @@ elparaiso-garden-vibes/
 │   │   ├── FloatingCTA.tsx
 │   │   └── ui/                # shadcn/ui components
 │   ├── config/
-│   │   └── siteConfig.ts      # Single source of truth for business metadata
+│   │   └── siteConfig.ts      # Centralized business/site configuration
 │   ├── hooks/
-│   │   └── use-toast.ts
 │   ├── pages/
 │   │   ├── Index.tsx
 │   │   └── NotFound.tsx
@@ -190,9 +173,9 @@ elparaiso-garden-vibes/
 │   ├── App.tsx
 │   ├── main.tsx
 │   └── index.css
-├── components.json            # shadcn/ui config
+├── components.json
 ├── package.json
 ├── tailwind.config.ts
 ├── vite.config.ts
-├── netlify.toml               # SPA fallback config (legacy/optional)
+├── netlify.toml
 └── README.md

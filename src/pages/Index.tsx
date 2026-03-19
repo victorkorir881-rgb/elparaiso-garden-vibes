@@ -7,6 +7,7 @@ import AmenitiesSection from "@/components/AmenitiesSection";
 import ContactSection from "@/components/ContactSection";
 import Footer from "@/components/Footer";
 import FloatingCTA from "@/components/FloatingCTA";
+import ChatWidget from "@/components/chat/ChatWidget";
 import { Toaster } from "@/components/ui/toaster";
 
 export default function Index() {
@@ -20,7 +21,9 @@ export default function Index() {
       <AmenitiesSection />
       <ContactSection />
       <Footer />
+      {/* Floating overlays — rendered after page content to ensure correct stacking */}
       <FloatingCTA />
+      <ChatWidget />
       <Toaster />
     </div>
   );

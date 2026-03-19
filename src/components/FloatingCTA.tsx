@@ -3,7 +3,9 @@ import { SITE_CONFIG } from "@/config/siteConfig";
 
 export default function FloatingCTA() {
   return (
-    <div className="fixed bottom-6 right-4 z-50 flex flex-col gap-3 md:hidden">
+    // Offset right so the chatbot launcher (bottom-6 right-4) has room.
+    // On mobile: shift left of chatbot button (right-20). On desktop: hidden.
+    <div className="fixed bottom-6 right-20 sm:right-24 z-50 flex flex-col gap-3 md:hidden">
       <a
         href={SITE_CONFIG.contact.phoneTelHref}
         className="flex items-center gap-2 bg-gradient-fire text-primary-foreground font-display text-xs tracking-widest uppercase px-5 py-3 rounded-full shadow-amber animate-pulse-amber"

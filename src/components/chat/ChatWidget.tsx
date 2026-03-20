@@ -77,9 +77,7 @@ export default function ChatWidget() {
       <div
         className={cn(
           "fixed z-[9999]",
-          // Positioned to the left of any existing FloatingCTA
-          // FloatingCTA is at bottom-6 right-4/6; we sit at bottom-6 right-[5rem] on mobile
-          "bottom-6 right-4 sm:right-6"
+          "bottom-5 right-4 sm:right-5"
         )}
       >
         <ChatLauncher

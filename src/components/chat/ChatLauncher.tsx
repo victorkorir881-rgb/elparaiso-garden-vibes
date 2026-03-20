@@ -18,31 +18,28 @@ export default function ChatLauncher({ isOpen, hasUnread, onClick }: ChatLaunche
       aria-label={isOpen ? "Close Elparaiso Concierge" : "Open Elparaiso Concierge"}
       aria-expanded={isOpen}
       className={cn(
-        "relative w-14 h-14 rounded-full flex items-center justify-center",
+        // Smaller: 52×52px (w-13 h-13 not in Tailwind, use explicit size)
+        "relative w-[52px] h-[52px] rounded-full flex items-center justify-center",
         "bg-gradient-fire shadow-amber",
+        // Calm transitions — no looping animation
         "transition-all duration-300 ease-out",
-        "hover:scale-110 hover:shadow-[0_0_30px_hsl(var(--amber)/0.5)]",
-        "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-        isOpen && "rotate-180 scale-105"
+        "hover:scale-105 hover:shadow-[0_0_20px_hsl(var(--fire-amber)/0.4)]",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        isOpen && "rotate-90"
       )}
     >
-      <span
-        className={cn(
-          "absolute inset-0 rounded-full bg-gradient-fire animate-ping opacity-30",
-          isOpen && "hidden"
-        )}
-      />
+      {/* No looping ping/pulse — removed animate-ping span entirely */}
 
       {isOpen ? (
-        <X size={22} className="text-primary-foreground transition-transform duration-300" />
+        <X size={19} className="text-primary-foreground transition-transform duration-300" />
       ) : (
-        <MessageCircle size={22} className="text-primary-foreground" />
+        <MessageCircle size={19} className="text-primary-foreground" />
       )}
 
       {/* Unread badge */}
       {hasUnread && !isOpen && (
-        <span className="absolute -top-1 -right-1 w-4 h-4 bg-garden rounded-full border-2 border-background flex items-center justify-center">
-          <span className="text-[8px] text-white font-bold">1</span>
+        <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 bg-garden rounded-full border-2 border-background flex items-center justify-center">
+          <span className="text-[7px] text-white font-bold">1</span>
         </span>
       )}
     </button>

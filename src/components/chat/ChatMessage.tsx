@@ -1,4 +1,3 @@
-```tsx id="c4m9tx"
 /**
  * ChatMessage.tsx
  * ------------------------------------------------------------------
@@ -9,6 +8,8 @@
  * - Typing indicator animation
  * - Action buttons under assistant messages
  * - Safe external link handling
+ * - Smooth-scroll support for internal anchors (#reservation, #menu, etc.)
+ * - Phone / WhatsApp CTA support
  * - Time display
  */
 
@@ -26,10 +27,7 @@ export default function ChatMessage({ message }: ChatMessageProps) {
 
   return (
     <div
-      className={cn(
-        "flex w-full",
-        isUser ? "justify-end" : "justify-start"
-      )}
+      className={cn("flex w-full", isUser ? "justify-end" : "justify-start")}
       role="listitem"
     >
       <div
@@ -74,9 +72,7 @@ export default function ChatMessage({ message }: ChatMessageProps) {
           <div
             className={cn(
               "mt-2 text-[10px]",
-              isUser
-                ? "text-primary-foreground/80"
-                : "text-muted-foreground"
+              isUser ? "text-primary-foreground/80" : "text-muted-foreground"
             )}
           >
             {timeLabel}
@@ -92,18 +88,42 @@ export default function ChatMessage({ message }: ChatMessageProps) {
 // -----------------------------------------------------------------------------
 
 function ActionButton({ action }: { action: ChatAction }) {
-  const href = getActionHref(action);
   const Icon = getActionIcon(action.type);
+
+  // Internal anchor link: #reservation, #menu, #contact, etc.
+  if (action.type === "link" && isInternalAnchor(action.value)) {
+    return (
+      <button
+        type="button"
+        onClick={() => handleInternalAnchorClick(action.value)}
+        className={cn(
+          "inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium",
+          "border border-border/50 bg-background/80 text-foreground",
+          "hover:bg-background transition-colors",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber focus-visible:ring-offset-1"
+        )}
+        aria-label={action.label}
+      >
+        <Icon size={14} />
+        <span>{action.label}</span>
+      </button>
+    );
+  }
+
+  // Phone / WhatsApp / external links
+  const href = getActionHref(action);
+  const external = action.type === "link" && isExternalLink(action.value);
 
   return (
     <a
       href={href}
-      target={action.type === "link" ? "_blank" : undefined}
-      rel={action.type === "link" ? "noopener noreferrer" : undefined}
+      target={external ? "_blank" : undefined}
+      rel={external ? "noopener noreferrer" : undefined}
       className={cn(
         "inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium",
         "border border-border/50 bg-background/80 text-foreground",
-        "hover:bg-background transition-colors"
+        "hover:bg-background transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber focus-visible:ring-offset-1"
       )}
       aria-label={action.label}
     >
@@ -141,8 +161,31 @@ function getActionIcon(type: ChatAction["type"]) {
 
 function sanitizePhone(value: string): string {
   // Keeps digits only, removes spaces, dashes, plus signs, etc.
-  // Example: "+254 712 345 678" -> "254712345678"
+  // Example: "+254 791 224 513" -> "254791224513"
   return value.replace(/[^\d]/g, "");
+}
+
+function isInternalAnchor(value: string): boolean {
+  return typeof value === "string" && value.startsWith("#");
+}
+
+function isExternalLink(value: string): boolean {
+  return /^https?:\/\//i.test(value);
+}
+
+function handleInternalAnchorClick(anchor: string) {
+  const el = document.querySelector(anchor);
+
+  if (el) {
+    el.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+    return;
+  }
+
+  // Safe fallback if the target section is not found
+  window.location.hash = anchor;
 }
 
 // -----------------------------------------------------------------------------
@@ -175,4 +218,3 @@ function formatTime(value: Date | string): string {
     minute: "2-digit",
   });
 }
-```

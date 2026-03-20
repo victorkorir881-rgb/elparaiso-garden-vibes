@@ -1,32 +1,15 @@
 /**
- * chatbotService.ts
+ * src/services/chatbotService.ts
  * ─────────────────────────────────────────────────────────────────────────────
  * UI-facing orchestration layer for the Elparaiso Garden Kisii chatbot.
  *
- * DESIGN PRINCIPLES
- * ─────────────────
- * 1. chatbotKnowledge.ts is the SINGLE source of truth for intent/FAQ logic.
- *    This file coordinates; it does NOT duplicate detection or keyword lists.
- *
- * 2. Layered matching safety:
- *    Layer 1 → findBestLocalFaq() (uses detectLocalIntent + keyword scoring)
- *    Layer 2 → Secondary full-scan across all non-fallback FAQs
- *    Layer 3 → Strong fallback with help prompts + CTAs
- *
- * 3. Greeting / help / brand questions receive polished dedicated responses.
- *
- * 4. Input is normalised before matching to prevent punctuation/casing misses
- *    e.g. "Do you have drinks??" → "do you have drinks" → drinks FAQ ✓
- *
- * 5. 100% frontend-only — no Supabase, no API, no network calls at runtime.
- *
- * FUTURE AI INTEGRATION
- * ─────────────────────
- * When a secure backend AI is ready:
- *  - Replace the body of getAssistantReply() with an async fetch to your
- *    own API route or Supabase Edge Function.
- *  - Keep the function signature identical so ChatPanel.tsx needs no changes.
- *  - Add AI_ENABLED flag in chatbotConfig.ts to toggle gradually.
+ * FINAL FIXED VERSION
+ * - Uses chatbotKnowledge.ts as the single source of truth
+ * - Stronger layered matching
+ * - Better short-query handling ("drinks", "menu", "parking", etc.)
+ * - Handles greetings / help / thanks / yes-no naturally
+ * - Safer fallback logic
+ * - 100% frontend-only (no API calls)
  */
 
 import type { ChatMessage, ChatAction } from "@/types/chat";
@@ -55,10 +38,6 @@ export interface ChatbotResponse {
 // WELCOME MESSAGE
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Returns the initial assistant message shown when the chat widget opens.
- * ChatPanel.tsx calls this once on first load.
- */
 export function getWelcomeMessage(): ChatbotResponse {
   return {
     content:
@@ -82,79 +61,153 @@ export function getWelcomeMessage(): ChatbotResponse {
 // MAIN ENTRY POINT
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Processes a user message and returns a structured assistant response.
- * Called by ChatPanel.tsx for every user message.
- *
- * @param input   - Raw user input (untrimmed, any case)
- * @param _history - Message history (reserved for future AI context passing)
- */
 export async function sendChatMessage(
   input: string,
   _history: ChatMessage[] = []
 ): Promise<ChatbotResponse> {
   const normalised = normaliseForMatching(input);
 
-  // Guard: empty / whitespace-only input
   if (!normalised) {
     return buildEmptyInputResponse();
   }
 
-  // Simulate realistic typing delay (keeps the UX natural)
   await simulateTypingDelay(normalised);
 
-  // ── THIS IS WHERE THE SECURE AI BACKEND CALL WILL GO LATER ───────────────
-  //
-  // Future integration point:
-  //   const aiReply = await callSecureAiBackend(normalised, _history);
-  //   if (aiReply) return aiReply;
-  //
-  // For now, all replies come from the local knowledge layer.
-  // ─────────────────────────────────────────────────────────────────────────
-
-  return getAssistantReply(normalised);
+  return getAssistantReply(normalised, _history);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CORE REPLY LOGIC
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Determines the best local response for normalised input.
- *
- * NOTE: This is the function to replace when integrating a real AI backend.
- * Keep the return type (ChatbotResponse) unchanged so ChatPanel.tsx is unaffected.
- */
-function getAssistantReply(normalised: string): ChatbotResponse {
-  // ── Layer 1: primary best-match via intent detection + keyword scoring ─────
+function getAssistantReply(
+  normalised: string,
+  _history: ChatMessage[] = []
+): ChatbotResponse {
+  // 0) Very common conversational cases first
+  const conversational = handleConversationalCases(normalised);
+  if (conversational) return conversational;
+
+  // 1) Primary best-match via chatbotKnowledge.ts
   const primaryFaq = findBestLocalFaq(normalised);
 
   if (primaryFaq.intent !== "fallback") {
     return formatFaqResponse(primaryFaq);
   }
 
-  // ── Layer 2: secondary full-scan in case intent detection missed ───────────
-  // This catches cases like "do you have drinks?" where a short, common word
-  // (drinks) may be missed if the input normalisation altered detection order.
+  // 2) Secondary strong global scan (all FAQs, weighted)
   const secondaryFaq = findBestFaqGlobally(normalised);
-
   if (secondaryFaq && secondaryFaq.intent !== "fallback") {
     return formatFaqResponse(secondaryFaq);
   }
 
-  // ── Layer 3: strong fallback with help prompts ─────────────────────────────
+  // 3) Extra short-query rescue layer
+  const rescueFaq = findBestShortQueryRescue(normalised);
+  if (rescueFaq) {
+    return formatFaqResponse(rescueFaq);
+  }
+
+  // 4) Strong fallback
   return formatFaqResponse(getFallbackFaq());
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONVERSATIONAL HANDLING
+// ─────────────────────────────────────────────────────────────────────────────
+
+function handleConversationalCases(normalised: string): ChatbotResponse | null {
+  // Greeting
+  if (isExactOrNear(normalised, [
+    "hi",
+    "hello",
+    "hey",
+    "yo",
+    "good morning",
+    "good afternoon",
+    "good evening",
+  ])) {
+    const greetingFaq = findFaqByIntent("greeting");
+    return greetingFaq ? formatFaqResponse(greetingFaq) : getWelcomeMessage();
+  }
+
+  // Help
+  if (
+    isExactOrNear(normalised, ["help", "what can you do", "what do you do"]) ||
+    normalised.includes("can you help")
+  ) {
+    const helpFaq = findFaqByIntent("help");
+    if (helpFaq) return formatFaqResponse(helpFaq);
+
+    return {
+      content:
+        "I can help with reservations, hours, location, menu, drinks, delivery, parking and more 😊",
+      actions: [CHATBOT_ACTIONS.reserve, CHATBOT_ACTIONS.call],
+      suggestions: QUICK_ACTIONS.map((a) => a.label),
+      intent: "help",
+    };
+  }
+
+  // Brand / who are you
+  if (
+    normalised.includes("who are you") ||
+    normalised.includes("what is elparaiso") ||
+    normalised.includes("tell me about elparaiso") ||
+    normalised === "elparaiso" ||
+    normalised === "elparaiso garden"
+  ) {
+    const brandFaq = findFaqByIntent("brand");
+    if (brandFaq) return formatFaqResponse(brandFaq);
+  }
+
+  // Thanks
+  if (
+    isExactOrNear(normalised, [
+      "thanks",
+      "thank you",
+      "thankyou",
+      "thx",
+      "nice",
+      "great",
+      "awesome",
+    ])
+  ) {
+    return {
+      content:
+        "You’re welcome 😊\n\nIf you'd like, I can also help with reservations, directions, menu options, or opening hours.",
+      actions: [CHATBOT_ACTIONS.reserve, CHATBOT_ACTIONS.call],
+      suggestions: ["How do I reserve?", "Where are you located?", "Are you open now?"],
+      intent: "help",
+    };
+  }
+
+  // Simple yes/no after a previous assistant response — safe generic handling
+  if (normalised === "yes" || normalised === "yeah" || normalised === "yep") {
+    return {
+      content:
+        "Great 😊 What would you like help with next?\n\nI can assist with reservations, directions, menu, drinks, or opening hours.",
+      actions: [CHATBOT_ACTIONS.reserve, CHATBOT_ACTIONS.call],
+      suggestions: QUICK_ACTIONS.map((a) => a.label),
+      intent: "help",
+    };
+  }
+
+  if (normalised === "no" || normalised === "nope" || normalised === "not really") {
+    return {
+      content:
+        "No problem 😊 If you need anything later, you can ask me about reservations, location, menu, drinks, or opening hours.",
+      actions: [CHATBOT_ACTIONS.call, CHATBOT_ACTIONS.whatsapp],
+      suggestions: QUICK_ACTIONS.map((a) => a.label),
+      intent: "help",
+    };
+  }
+
+  return null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SECONDARY GLOBAL SCAN
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Scans ALL non-fallback FAQs by keyword overlap.
- * This is the safety net when primary intent detection returns "fallback"
- * despite the message clearly matching a topic (e.g. "drinks", "bar").
- */
 function findBestFaqGlobally(text: string): ChatFaq | null {
   const candidates = LOCAL_FAQS.filter((f) => f.intent !== "fallback");
 
@@ -162,7 +215,30 @@ function findBestFaqGlobally(text: string): ChatFaq | null {
   let bestScore = 0;
 
   for (const faq of candidates) {
-    const score = scoreKeywordOverlap(text, faq.keywords) + faq.priority * 0.1;
+    let score = 0;
+
+    // Keyword scoring
+    score += scoreKeywordOverlap(text, faq.keywords);
+
+    // Intent priority slight bias
+    score += faq.priority * 0.12;
+
+    // Exact phrase bonus
+    for (const kw of faq.keywords) {
+      const k = kw.toLowerCase().trim();
+      if (!k) continue;
+
+      if (text === k) {
+        score += 6;
+      } else if (text.startsWith(k) || text.endsWith(k)) {
+        score += 2;
+      }
+    }
+
+    // Short query boost
+    if (text.length <= 20 && faq.keywords.some((kw) => text.includes(kw.toLowerCase()))) {
+      score += 2;
+    }
 
     if (score > bestScore) {
       bestScore = score;
@@ -170,27 +246,80 @@ function findBestFaqGlobally(text: string): ChatFaq | null {
     }
   }
 
-  return bestScore > 0 ? bestFaq : null;
+  // Slight threshold to avoid random weak matches
+  return bestScore >= 1.5 ? bestFaq : null;
 }
 
-/**
- * Keyword overlap scoring with length-aware weighting.
- * Longer / multi-word keywords score higher to prefer specific matches.
- */
 function scoreKeywordOverlap(text: string, keywords: string[]): number {
   let score = 0;
 
   for (const kw of keywords) {
-    const k = kw.toLowerCase();
+    const k = kw.toLowerCase().trim();
+    if (!k) continue;
 
     if (text.includes(k)) {
       const tokens = k.split(/\s+/).filter(Boolean);
-      // Multi-word phrase → +3,  long single word (>5 chars) → +2,  short word → +1
-      score += tokens.length > 1 ? 3 : k.length > 5 ? 2 : 1;
+
+      // Exact full query = strongest
+      if (text === k) {
+        score += 6;
+        continue;
+      }
+
+      // Multi-word phrases should dominate
+      if (tokens.length >= 3) {
+        score += 5;
+      } else if (tokens.length === 2) {
+        score += 4;
+      } else {
+        // Single word weighting
+        if (k.length >= 8) score += 3;
+        else if (k.length >= 5) score += 2;
+        else score += 1.25;
+      }
     }
   }
 
   return score;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SHORT QUERY RESCUE
+// ─────────────────────────────────────────────────────────────────────────────
+
+function findBestShortQueryRescue(text: string): ChatFaq | null {
+  const q = text.trim();
+
+  const intentMap: Array<{ match: string[]; intent: ChatIntent }> = [
+    { match: ["hours", "open", "opening", "time", "close"], intent: "hours" },
+    { match: ["late night", "open late", "24/7", "24 7"], intent: "late_night" },
+    { match: ["location", "where", "address", "place"], intent: "location" },
+    { match: ["direction", "directions", "map"], intent: "directions" },
+    { match: ["reserve", "reservation", "book", "booking", "table"], intent: "reservation" },
+    { match: ["walk in", "walkin"], intent: "walk_in" },
+    { match: ["menu", "food", "eat"], intent: "menu" },
+    { match: ["drink", "drinks", "bar", "cocktail", "beer"], intent: "drinks" },
+    { match: ["contact", "phone", "call", "whatsapp"], intent: "contact" },
+    { match: ["delivery", "takeaway", "take out", "pickup"], intent: "delivery" },
+    { match: ["parking", "car"], intent: "parking" },
+    { match: ["ambience", "atmosphere", "vibe"], intent: "ambience" },
+    { match: ["date", "romantic"], intent: "date_night" },
+    { match: ["family", "kids", "children"], intent: "family" },
+    { match: ["group", "groups"], intent: "group_booking" },
+    { match: ["birthday", "celebration", "party"], intent: "celebrations" },
+    { match: ["event", "events", "live music"], intent: "events" },
+    { match: ["payment", "mpesa", "cash", "card"], intent: "payment" },
+    { match: ["wifi", "internet"], intent: "wifi" },
+  ];
+
+  for (const entry of intentMap) {
+    if (entry.match.some((m) => q === m || q.includes(m))) {
+      const faq = findFaqByIntent(entry.intent);
+      if (faq) return faq;
+    }
+  }
+
+  return null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -199,18 +328,24 @@ function scoreKeywordOverlap(text: string, keywords: string[]): number {
 
 function formatFaqResponse(faq: ChatFaq): ChatbotResponse {
   return {
-    content:     faq.answer,
-    actions:     faq.actions     ?? defaultActionsFor(faq.intent),
+    content: faq.answer,
+    actions: faq.actions ?? defaultActionsFor(faq.intent),
     suggestions: faq.suggestions ?? defaultSuggestionsFor(faq.intent),
-    intent:      faq.intent,
+    intent: faq.intent,
   };
 }
 
-/**
- * Default CTA actions when a FAQ doesn't explicitly specify any.
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// DEFAULT ACTIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
 function defaultActionsFor(intent: ChatIntent): ChatAction[] {
   switch (intent) {
+    case "greeting":
+    case "help":
+    case "brand":
+      return [CHATBOT_ACTIONS.reserve, CHATBOT_ACTIONS.call];
+
     case "hours":
     case "late_night":
       return [CHATBOT_ACTIONS.reserve, CHATBOT_ACTIONS.call];
@@ -240,47 +375,65 @@ function defaultActionsFor(intent: ChatIntent): ChatAction[] {
     case "celebrations":
       return [CHATBOT_ACTIONS.reserve, CHATBOT_ACTIONS.whatsapp, CHATBOT_ACTIONS.call];
 
+    case "events":
+      return [CHATBOT_ACTIONS.whatsapp, CHATBOT_ACTIONS.call];
+
+    case "payment":
+    case "wifi":
+    case "parking":
+      return [CHATBOT_ACTIONS.call, CHATBOT_ACTIONS.whatsapp];
+
     case "ambience":
     case "date_night":
     case "family":
     case "use_case":
       return [CHATBOT_ACTIONS.reserve];
 
+    case "fallback":
     default:
       return [CHATBOT_ACTIONS.call, CHATBOT_ACTIONS.whatsapp];
   }
 }
 
-/**
- * Default follow-up suggestions when a FAQ doesn't specify any.
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// DEFAULT SUGGESTIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
 function defaultSuggestionsFor(intent: ChatIntent): string[] {
   const defaults: Partial<Record<ChatIntent, string[]>> = {
-    greeting:      ["Are you open now?", "Where are you located?", "How do I reserve?"],
-    help:          ["Are you open now?", "How do I reserve?", "What's on the menu?"],
-    hours:         ["Where are you located?", "How do I reserve?"],
-    late_night:    ["What's on the menu?", "Do you serve drinks?"],
-    location:      ["Is there parking?", "How can I contact you?"],
-    directions:    ["Is there parking?", "Are you open now?"],
-    reservation:   ["Do you host group bookings?", "What's on the menu?"],
-    walk_in:       ["How do I reserve?", "Are you open now?"],
-    menu:          ["Do you serve drinks?", "Do you do delivery?"],
-    drinks:        ["What's on the menu?", "How do I reserve?"],
-    contact:       ["Where are you located?", "How do I reserve?"],
-    delivery:      ["How can I contact you?", "What's on the menu?"],
-    parking:       ["Where are you located?", "How do I reserve?"],
-    ambience:      ["Do you host group bookings?", "What's on the menu?"],
-    date_night:    ["How do I reserve?", "What's on the menu?"],
-    family:        ["How do I reserve?", "What's the atmosphere like?"],
+    greeting: ["Are you open now?", "Where are you located?", "How do I reserve?"],
+    help: ["Are you open now?", "How do I reserve?", "What's on the menu?"],
+    brand: ["What's on the menu?", "Are you open now?", "How do I reserve?"],
+
+    hours: ["Where are you located?", "How do I reserve?"],
+    late_night: ["What's on the menu?", "Do you serve drinks?"],
+
+    location: ["Is there parking?", "How can I contact you?"],
+    directions: ["Is there parking?", "Are you open now?"],
+
+    reservation: ["Do you host group bookings?", "What's on the menu?"],
+    walk_in: ["How do I reserve?", "Are you open now?"],
+
+    menu: ["Do you serve drinks?", "Do you do delivery?"],
+    drinks: ["What's on the menu?", "How do I reserve?"],
+
+    contact: ["Where are you located?", "How do I reserve?"],
+    delivery: ["How can I contact you?", "What's on the menu?"],
+    parking: ["Where are you located?", "How do I reserve?"],
+
+    ambience: ["Do you host group bookings?", "What's on the menu?"],
+    date_night: ["How do I reserve?", "What's on the menu?"],
+    family: ["How do I reserve?", "What's the atmosphere like?"],
+
     group_booking: ["How do I reserve?", "How can I contact you?"],
-    celebrations:  ["How do I reserve?", "How can I contact you?"],
-    events:        ["How can I contact you?", "How do I reserve?"],
-    payment:       ["How can I contact you?", "How do I reserve?"],
-    wifi:          ["How can I contact you?", "What are your opening hours?"],
-    use_case:      ["Are you open now?", "How do I reserve?"],
-    visit_planning:["How do I reserve?", "Where are you located?"],
-    brand:         ["What's on the menu?", "Are you open now?"],
-    fallback:      ["Are you open now?", "Where are you located?", "How do I reserve?"],
+    celebrations: ["How do I reserve?", "How can I contact you?"],
+    events: ["How can I contact you?", "How do I reserve?"],
+    payment: ["How can I contact you?", "How do I reserve?"],
+    wifi: ["How can I contact you?", "What are your opening hours?"],
+    use_case: ["Are you open now?", "How do I reserve?"],
+    visit_planning: ["How do I reserve?", "Where are you located?"],
+
+    fallback: ["Are you open now?", "Where are you located?", "How do I reserve?"],
   };
 
   return defaults[intent] ?? ["Are you open now?", "How do I reserve?"];
@@ -290,10 +443,16 @@ function defaultSuggestionsFor(intent: ChatIntent): string[] {
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
+function findFaqByIntent(intent: ChatIntent): ChatFaq | null {
+  return LOCAL_FAQS.find((faq) => faq.intent === intent) ?? null;
+}
+
 function getFallbackFaq(): ChatFaq {
-  return (
-    LOCAL_FAQS.find((faq) => faq.intent === "fallback") ?? LOCAL_FAQS[0]
-  );
+  return LOCAL_FAQS.find((faq) => faq.intent === "fallback") ?? LOCAL_FAQS[0];
+}
+
+function isExactOrNear(input: string, values: string[]): boolean {
+  return values.some((v) => input === v || input.startsWith(v) || input.includes(v));
 }
 
 function buildEmptyInputResponse(): ChatbotResponse {
@@ -305,19 +464,15 @@ function buildEmptyInputResponse(): ChatbotResponse {
       "• *Where are you located?*\n" +
       "• *How do I reserve a table?*\n" +
       "• *What's on the menu?*",
-    actions:     [CHATBOT_ACTIONS.reserve, CHATBOT_ACTIONS.call],
+    actions: [CHATBOT_ACTIONS.reserve, CHATBOT_ACTIONS.call],
     suggestions: QUICK_ACTIONS.map((a) => a.label),
-    intent:      "fallback",
+    intent: "fallback",
   };
 }
 
-/**
- * Adaptive typing delay that scales with message length for a natural feel.
- * Short inputs → faster reply. Longer inputs → slightly longer pause.
- */
 function simulateTypingDelay(text: string): Promise<void> {
-  const base  = 600;
-  const extra = Math.min(text.length * 4, 600); // cap extra at 600 ms
+  const base = 450;
+  const extra = Math.min(text.length * 4, 500);
   const total = base + extra;
   return new Promise((resolve) => setTimeout(resolve, total));
 }
@@ -326,7 +481,6 @@ function simulateTypingDelay(text: string): Promise<void> {
 // UTILITY EXPORTS
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Returns the quick action chip labels for use in QuickActions.tsx */
 export function getQuickActionLabels(): string[] {
   return QUICK_ACTIONS.map((a) => a.label);
 }

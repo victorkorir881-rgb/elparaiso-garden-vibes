@@ -1,304 +1,386 @@
+```ts id="m8qk5y"
 /**
- * chatbotService.ts — UI-facing orchestration layer for the Elparaiso Garden chatbot.
+ * chatbotService.ts
+ * ------------------------------------------------------------------
+ * Local-first chatbot service for Elparaiso Garden Kisii
  *
- * Exposes a single public function: sendChatMessage()
+ * PURPOSE:
+ * - Fully functional WITHOUT Supabase / backend
+ * - Uses chatbotKnowledge.ts as the single source of truth
+ * - Supports:
+ *    - intent detection
+ *    - FAQ matching
+ *    - smart fallback
+ *    - CTA actions
+ *    - typing-compatible assistant response shape
  *
- * Flow:
- *  1. Ensure / create a browser session id
- *  2. Ensure a Supabase conversation record (if configured)
- *  3. Persist the user message to Supabase (silent fallback)
- *  4. Determine the best reply via FAQ + keyword matching
- *  5. Persist the assistant reply to Supabase (silent fallback)
- *  6. Return a structured ChatResponse to the UI
- *
- * ─── FUTURE AI INTEGRATION ──────────────────────────────────────────────────
- * When you are ready to connect a real AI backend:
- *
- *   1. Replace the body of `getAssistantReply()` with an API call to your
- *      secure backend (your own server, or a Supabase Edge Function).
- *   2. The UI layer (ChatPanel) does NOT need to change at all.
- *   3. Never call OpenAI directly from the browser — always go via a backend
- *      endpoint that holds the secret API key server-side.
- * ────────────────────────────────────────────────────────────────────────────
+ * FUTURE:
+ * - Later, you can replace getAssistantReply() with a backend/API call
+ *   without changing the UI components.
  */
 
-import { v4 as uuidv4 } from "@/lib/uuid";
-import {
-  ChatMessage,
-  ChatResponse,
-  ChatIntent,
-  ChatAction,
-} from "@/types/chat";
-import {
-  ensureConversation,
-  persistMessage,
-  fetchFaqs,
-} from "@/services/chatbotSupabaseService";
+import type { ChatMessage, ChatAction } from "@/types/chat";
 import {
   LOCAL_FAQS,
-  INTENT_KEYWORDS,
-  FALLBACK_MESSAGE,
+  QUICK_ACTIONS,
+  detectLocalIntent,
+  findBestLocalFaq,
+  type ChatFaq,
+  type ChatIntent,
 } from "@/config/chatbotKnowledge";
-import { CHATBOT_CONFIG } from "@/config/chatbotConfig";
-import { SITE_CONFIG } from "@/config/siteConfig";
-import { ChatFaq } from "@/types/chat";
 
-// ─── Session management ───────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// RESPONSE TYPE
+// -----------------------------------------------------------------------------
+// This is the object your ChatPanel.tsx expects from sendChatMessage().
 
-function getOrCreateSessionId(): string {
-  let id = localStorage.getItem(CHATBOT_CONFIG.sessionIdKey);
-  if (!id) {
-    id = uuidv4();
-    localStorage.setItem(CHATBOT_CONFIG.sessionIdKey, id);
+export interface ChatbotResponse {
+  content: string;
+  actions?: ChatAction[];
+  suggestions?: string[];
+  intent?: ChatIntent;
+}
+
+// -----------------------------------------------------------------------------
+// WELCOME MESSAGE
+// -----------------------------------------------------------------------------
+// Optional helper you can use inside ChatPanel if needed.
+
+export function getWelcomeMessage(): ChatbotResponse {
+  const fallback = LOCAL_FAQS.find((f) => f.intent === "fallback");
+
+  return {
+    content:
+      "Hi 👋 Welcome to **Elparaiso Garden Kisii**.\n\n" +
+      "I can help with:\n" +
+      "• Opening hours\n" +
+      "• Location & directions\n" +
+      "• Reservations\n" +
+      "• Menu & food\n" +
+      "• Contact details\n" +
+      "• Delivery / takeaway\n\n" +
+      "Try asking me anything 😊",
+    actions: fallback?.actions ?? [],
+    suggestions: QUICK_ACTIONS.map((a) => a.label),
+    intent: "fallback",
+  };
+}
+
+// -----------------------------------------------------------------------------
+// MAIN ENTRY POINT
+// -----------------------------------------------------------------------------
+// This is what ChatPanel.tsx should call.
+//
+// Example:
+// const response = await sendChatMessage(trimmed, historyForRequest);
+
+export async function sendChatMessage(
+  input: string,
+  _history: ChatMessage[] = []
+): Promise<ChatbotResponse> {
+  const normalized = normalizeInput(input);
+
+  // Safety fallback for empty input
+  if (!normalized) {
+    const fallback = getFallbackFaq();
+    return formatFaqResponse(fallback, "fallback");
   }
-  return id;
+
+  // Simulate a tiny natural delay so the typing indicator feels realistic
+  await delay(500);
+
+  // Get best local response
+  const reply = getAssistantReply(normalized);
+
+  return reply;
 }
 
-// Conversation id is cached per page load (not persisted across tabs)
-let _conversationId: string | null = null;
+// -----------------------------------------------------------------------------
+// CORE REPLY LOGIC
+// -----------------------------------------------------------------------------
 
-async function getConversationId(sessionId: string): Promise<string | null> {
-  if (_conversationId) return _conversationId;
-  _conversationId = await ensureConversation(sessionId);
-  return _conversationId;
+function getAssistantReply(input: string): ChatbotResponse {
+  const intent = detectIntent(input);
+
+  // First try best FAQ using smart scoring
+  const faq = findBestFaq(input, intent);
+
+  if (faq) {
+    return formatFaqResponse(faq, intent);
+  }
+
+  // If no direct FAQ match, try soft fallback by scanning all FAQs
+  const softMatch = findSoftBestFaq(input);
+
+  if (softMatch) {
+    return formatFaqResponse(softMatch, softMatch.intent);
+  }
+
+  // Final fallback
+  return formatFaqResponse(getFallbackFaq(), "fallback");
 }
 
-// ─── Intent detection ────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// INTENT DETECTION
+// -----------------------------------------------------------------------------
+// Uses helper from chatbotKnowledge.ts if available.
+// Falls back to local logic if ever needed.
 
 function detectIntent(input: string): ChatIntent {
-  const normalized = input.toLowerCase();
+  try {
+    return detectLocalIntent(input);
+  } catch {
+    return detectIntentFallback(input);
+  }
+}
 
-  let bestIntent: ChatIntent = "fallback";
-  let bestScore = 0;
+function detectIntentFallback(input: string): ChatIntent {
+  const text = input.toLowerCase();
 
-  for (const [intent, keywords] of Object.entries(INTENT_KEYWORDS) as [
-    ChatIntent,
-    string[],
-  ][]) {
-    if (intent === "fallback") continue;
-    const score = keywords.reduce(
-      (acc, kw) => (normalized.includes(kw) ? acc + 1 : acc),
-      0
-    );
-    if (score > bestScore) {
-      bestScore = score;
-      bestIntent = intent;
+  const checks: Array<{ intent: ChatIntent; words: string[] }> = [
+    {
+      intent: "hours",
+      words: ["open", "hours", "closing", "close", "time", "today", "late", "night"],
+    },
+    {
+      intent: "location",
+      words: ["where", "location", "address", "map", "direction", "find", "kisii"],
+    },
+    {
+      intent: "reservation",
+      words: ["reserve", "reservation", "book", "booking", "table", "seat"],
+    },
+    {
+      intent: "menu",
+      words: ["menu", "food", "eat", "meal", "serve", "nyama", "choma", "grill"],
+    },
+    {
+      intent: "contact",
+      words: ["contact", "call", "phone", "number", "whatsapp", "reach"],
+    },
+    {
+      intent: "delivery",
+      words: ["delivery", "takeaway", "pickup", "pick up", "order", "parcel"],
+    },
+    {
+      intent: "parking",
+      words: ["parking", "park", "car", "vehicle"],
+    },
+    {
+      intent: "ambience",
+      words: ["ambience", "atmosphere", "vibe", "romantic", "date", "hangout"],
+    },
+    {
+      intent: "group_booking",
+      words: ["group", "birthday", "celebration", "party", "corporate"],
+    },
+    {
+      intent: "payment",
+      words: ["payment", "pay", "cash", "mpesa", "m-pesa", "card"],
+    },
+    {
+      intent: "family",
+      words: ["family", "kids", "children", "baby"],
+    },
+    {
+      intent: "drinks",
+      words: ["drink", "drinks", "bar", "beer", "wine", "cocktail", "alcohol"],
+    },
+    {
+      intent: "events",
+      words: ["event", "music", "live music", "screening", "football", "match", "show"],
+    },
+    {
+      intent: "wifi",
+      words: ["wifi", "wi-fi", "internet", "laptop", "study"],
+    },
+  ];
+
+  for (const group of checks) {
+    if (group.words.some((word) => text.includes(word))) {
+      return group.intent;
     }
   }
 
-  return bestScore > 0 ? bestIntent : "fallback";
+  return "fallback";
 }
 
-// ─── FAQ matching ────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// FAQ MATCHING
+// -----------------------------------------------------------------------------
 
-function findBestFaq(
-  input: string,
-  intent: ChatIntent,
-  faqs: ChatFaq[]
-): ChatFaq | null {
+function findBestFaq(input: string, intent: ChatIntent): ChatFaq | null {
+  // Prefer the helper from chatbotKnowledge.ts if present
+  try {
+    const best = findBestLocalFaq(input);
+
+    // If helper returns fallback while we have a stronger intent,
+    // we still allow intent-based matching below.
+    if (best.intent !== "fallback") {
+      return best;
+    }
+  } catch {
+    // ignore and use internal matching below
+  }
+
   const normalized = input.toLowerCase();
 
-  // First: match by exact intent + keyword overlap
-  const intentMatches = faqs.filter((f) => f.intent === intent);
-  if (intentMatches.length > 0) {
-    // Score each by keyword overlap
-    const scored = intentMatches.map((faq) => ({
+  const intentMatches = LOCAL_FAQS.filter((faq) => faq.intent === intent);
+
+  if (intentMatches.length === 0) {
+    return null;
+  }
+
+  const scored = intentMatches.map((faq) => {
+    const keywordScore = scoreKeywordOverlap(normalized, faq.keywords);
+    const phraseBoost = scorePhraseBoost(normalized, faq.question);
+    const totalScore = keywordScore + phraseBoost;
+
+    return {
       faq,
-      score: faq.keywords.reduce(
-        (acc, kw) => (normalized.includes(kw.toLowerCase()) ? acc + 1 : acc),
-        0
-      ),
-    }));
-    scored.sort((a, b) => b.faq.priority - a.faq.priority || b.score - a.score);
-    return scored[0].faq;
+      score: totalScore,
+    };
+  });
+
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return b.faq.priority - a.faq.priority;
+  });
+
+  const best = scored[0];
+
+  // Important: only accept if it actually matched something
+  if (!best || best.score <= 0) {
+    return null;
   }
 
-  return null;
+  return best.faq;
 }
 
-// ─── Inline action builder ───────────────────────────────────────────────────
+// Soft global scan across all FAQs if direct intent path fails
+function findSoftBestFaq(input: string): ChatFaq | null {
+  const normalized = input.toLowerCase();
 
-function actionsForIntent(intent: ChatIntent): ChatAction[] {
-  switch (intent) {
-    case "reservation":
-      return [
-        { label: "Reserve Now", scrollTo: "contact", variant: "primary" },
-        {
-          label: "WhatsApp",
-          href: SITE_CONFIG.contact.whatsappHref,
-          variant: "secondary",
-        },
-        {
-          label: "Call Now",
-          href: SITE_CONFIG.contact.phoneTelHref,
-          variant: "secondary",
-        },
-      ];
-    case "contact":
-      return [
-        {
-          label: "Call 0791 224513",
-          href: SITE_CONFIG.contact.phoneTelHref,
-          variant: "primary",
-        },
-        {
-          label: "WhatsApp",
-          href: SITE_CONFIG.contact.whatsappHref,
-          variant: "secondary",
-        },
-      ];
-    case "location":
-      return [
-        { label: "Get Directions", scrollTo: "contact", variant: "primary" },
-      ];
-    case "menu":
-      return [{ label: "View Menu", scrollTo: "menu", variant: "primary" }];
-    case "delivery":
-      return [
-        {
-          label: "Call to Order",
-          href: SITE_CONFIG.contact.phoneTelHref,
-          variant: "primary",
-        },
-        {
-          label: "WhatsApp Order",
-          href: SITE_CONFIG.contact.whatsappHref,
-          variant: "secondary",
-        },
-      ];
-    case "fallback":
-      return [
-        {
-          label: "Call Us",
-          href: SITE_CONFIG.contact.phoneTelHref,
-          variant: "primary",
-        },
-        {
-          label: "WhatsApp",
-          href: SITE_CONFIG.contact.whatsappHref,
-          variant: "secondary",
-        },
-      ];
-    default:
-      return [];
-  }
-}
+  const scored = LOCAL_FAQS
+    .filter((faq) => faq.intent !== "fallback")
+    .map((faq) => {
+      const keywordScore = scoreKeywordOverlap(normalized, faq.keywords);
+      const phraseBoost = scorePhraseBoost(normalized, faq.question);
+      const totalScore = keywordScore + phraseBoost;
 
-// ─── Typing simulation ────────────────────────────────────────────────────────
+      return {
+        faq,
+        score: totalScore,
+      };
+    });
 
-function typingDelay(): Promise<void> {
-  const delay =
-    CHATBOT_CONFIG.typingDelayMin +
-    Math.random() *
-      (CHATBOT_CONFIG.typingDelayMax - CHATBOT_CONFIG.typingDelayMin);
-  return new Promise((r) => setTimeout(r, delay));
-}
+  scored.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return b.faq.priority - a.faq.priority;
+  });
 
-// ─── Core reply engine ────────────────────────────────────────────────────────
+  const best = scored[0];
 
-/**
- * Determines the assistant reply for a given user message.
- *
- * ─── FUTURE AI INTEGRATION POINT ────────────────────────────────────────────
- * Replace this function body with a call to a secure backend endpoint:
- *
- *   const response = await fetch('/api/chat', {
- *     method: 'POST',
- *     headers: { 'Content-Type': 'application/json' },
- *     body: JSON.stringify({ message, history })
- *   });
- *   return response.json();
- *
- * That backend endpoint should:
- *   - Hold the OpenAI (or other LLM) API key server-side
- *   - Use the conversation history for context
- *   - Return a ChatResponse shape
- *
- * DO NOT put OpenAI API keys in the browser/frontend.
- * ────────────────────────────────────────────────────────────────────────────
- */
-async function getAssistantReply(
-  message: string,
-  _history: ChatMessage[],
-  supabaseFaqs: ChatFaq[]
-): Promise<ChatResponse> {
-  const intent = detectIntent(message);
-
-  // Prefer Supabase FAQs, fall back to local knowledge
-  const faqPool = supabaseFaqs.length > 0 ? supabaseFaqs : LOCAL_FAQS;
-  const matched = findBestFaq(message, intent, faqPool);
-
-  const content = matched?.answer ?? FALLBACK_MESSAGE;
-  const suggestions = matched?.suggestions ?? undefined;
-  const actions = actionsForIntent(intent);
-
-  return { content, intent, actions, suggestions };
-}
-
-// ─── Supabase FAQ cache ───────────────────────────────────────────────────────
-
-let _faqCache: ChatFaq[] | null = null;
-let _faqCachedAt = 0;
-const FAQ_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-
-async function getCachedFaqs(): Promise<ChatFaq[]> {
-  const now = Date.now();
-  if (_faqCache && now - _faqCachedAt < FAQ_CACHE_TTL_MS) {
-    return _faqCache;
-  }
-  _faqCache = await fetchFaqs();
-  _faqCachedAt = now;
-  return _faqCache;
-}
-
-// ─── Public API ───────────────────────────────────────────────────────────────
-
-/**
- * Primary function consumed by the ChatPanel component.
- * Handles the full send → reply cycle including persistence.
- */
-export async function sendChatMessage(
-  message: string,
-  history: ChatMessage[] = []
-): Promise<ChatResponse> {
-  const sessionId = getOrCreateSessionId();
-
-  // Fire-and-forget Supabase tasks — don't block the UI on them
-  const conversationPromise = getConversationId(sessionId);
-  const faqsPromise = getCachedFaqs();
-
-  // Simulate realistic typing delay
-  const [conversationId, faqs] = await Promise.all([
-    conversationPromise,
-    faqsPromise,
-    typingDelay(),
-  ]);
-
-  // Persist user message (non-blocking)
-  if (conversationId) {
-    persistMessage({
-      conversationId,
-      sessionId,
-      role: "user",
-      message,
-    }).catch(() => {/* silent */});
+  if (!best || best.score <= 0) {
+    return null;
   }
 
-  // Generate reply
-  const response = await getAssistantReply(message, history, faqs);
-
-  // Persist assistant reply (non-blocking)
-  if (conversationId) {
-    persistMessage({
-      conversationId,
-      sessionId,
-      role: "assistant",
-      message: response.content,
-      intent: response.intent,
-    }).catch(() => {/* silent */});
-  }
-
-  return response;
+  return best.faq;
 }
 
-export { getOrCreateSessionId };
+// -----------------------------------------------------------------------------
+// RESPONSE FORMATTER
+// -----------------------------------------------------------------------------
+
+function formatFaqResponse(faq: ChatFaq, intent: ChatIntent): ChatbotResponse {
+  return {
+    content: faq.answer,
+    actions: faq.actions ?? [],
+    suggestions: faq.suggestions ?? [],
+    intent,
+  };
+}
+
+// -----------------------------------------------------------------------------
+// HELPERS
+// -----------------------------------------------------------------------------
+
+function getFallbackFaq(): ChatFaq {
+  return (
+    LOCAL_FAQS.find((faq) => faq.intent === "fallback") ??
+    LOCAL_FAQS[0]
+  );
+}
+
+function normalizeInput(input: string): string {
+  return input
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function scoreKeywordOverlap(text: string, keywords: string[]): number {
+  let score = 0;
+
+  for (const keyword of keywords) {
+    const kw = keyword.toLowerCase();
+
+    // Exact includes
+    if (text.includes(kw)) {
+      score += kw.length > 6 ? 3 : 2;
+    }
+
+    // Token-based partial matching for multi-word inputs
+    const tokens = kw.split(" ").filter(Boolean);
+    if (tokens.length > 1) {
+      const matchedTokens = tokens.filter((t) => text.includes(t)).length;
+      if (matchedTokens === tokens.length) {
+        score += 2;
+      } else if (matchedTokens > 0) {
+        score += 1;
+      }
+    }
+  }
+
+  return score;
+}
+
+function scorePhraseBoost(text: string, question: string): number {
+  const normalizedQuestion = question.toLowerCase();
+
+  // Small relevance boost if user wording resembles FAQ wording
+  let score = 0;
+
+  const significantWords = normalizedQuestion
+    .replace(/[^\w\s]/g, "")
+    .split(" ")
+    .filter((word) => word.length >= 4);
+
+  const matches = significantWords.filter((word) => text.includes(word)).length;
+
+  if (matches >= 3) score += 3;
+  else if (matches === 2) score += 2;
+  else if (matches === 1) score += 1;
+
+  return score;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// -----------------------------------------------------------------------------
+// OPTIONAL UTILITIES
+// -----------------------------------------------------------------------------
+// If your ChatPanel wants to show suggestion chips after a response,
+// you can use response.suggestions directly.
+//
+// If you later integrate backend AI:
+// - keep sendChatMessage()
+// - replace getAssistantReply() with an API call
+// - keep the same return shape
+
+export function getQuickActionLabels(): string[] {
+  return QUICK_ACTIONS.map((a) => a.label);
+}
+```

@@ -54,7 +54,7 @@ export default function ChatWidget() {
           // Fixed position, above everything
           "fixed z-[9998]",
           // Desktop: bottom-right anchored panel
-          "bottom-24 right-4 sm:right-6",
+          "bottom-[4.5rem] right-4 sm:right-5",
           // Sizing
           "w-[calc(100vw-2rem)] max-w-[400px]",
           // Height: taller on desktop, constrained on mobile

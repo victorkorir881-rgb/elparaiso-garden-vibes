@@ -1,25 +1,27 @@
+```tsx id="9k2tpf"
 /**
- * ChatPanel.tsx — The main expandable chat interface.
+ * ChatPanel.tsx
+ * ------------------------------------------------------------------
+ * Production-ready floating chatbot panel for Elparaiso Garden Kisii
  *
- * Manages:
- *  - Message state and history
- *  - localStorage persistence
- *  - Sending messages via chatbotService
- *  - Typing indicator lifecycle
- *  - Auto-scroll to latest message
- *  - Keyboard accessibility (ESC to close, Enter to send)
+ * FEATURES:
+ * - Welcome message on first load
+ * - LocalStorage persistence (no backend required)
+ * - Quick action chips
+ * - Typing indicator support
+ * - Prevents stale history bug when sending messages
+ * - Clean scroll-to-bottom behavior
+ * - Works with upgraded chatbotService.ts
  */
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import { X, Minimize2, Send, Sparkles } from "lucide-react";
-import { ChatMessage as ChatMessageType } from "@/types/chat";
-import { sendChatMessage } from "@/services/chatbotService";
-import { CHATBOT_CONFIG } from "@/config/chatbotConfig";
-import { WELCOME_MESSAGE } from "@/config/chatbotKnowledge";
-import { v4 as uuidv4 } from "@/lib/uuid";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { X, Minus, Send, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
-import ChatMessageBubble from "./ChatMessage";
+import ChatMessage from "./ChatMessage";
 import QuickActions from "./QuickActions";
+import { sendChatMessage, getWelcomeMessage } from "@/services/chatbotService";
+import type { ChatMessage as ChatMessageType } from "@/types/chat";
+import { v4 as uuidv4 } from "@/lib/uuid";
 
 interface ChatPanelProps {
   onClose: () => void;
@@ -27,276 +29,356 @@ interface ChatPanelProps {
   isVisible: boolean;
 }
 
-// ─── Persistence helpers ──────────────────────────────────────────────────────
+const STORAGE_KEY = "elparaiso-chat-history";
 
-function loadPersistedMessages(): ChatMessageType[] {
-  try {
-    const raw = localStorage.getItem(CHATBOT_CONFIG.messageHistoryKey);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as Array<
-      Omit<ChatMessageType, "timestamp"> & { timestamp: string }
-    >;
-    return parsed
-      .slice(-CHATBOT_CONFIG.maxPersistedMessages)
-      .map((m) => ({ ...m, timestamp: new Date(m.timestamp) }));
-  } catch {
-    return [];
-  }
-}
-
-function persistMessages(messages: ChatMessageType[]) {
-  try {
-    localStorage.setItem(
-      CHATBOT_CONFIG.messageHistoryKey,
-      JSON.stringify(messages.slice(-CHATBOT_CONFIG.maxPersistedMessages))
-    );
-  } catch {
-    /* silent */
-  }
-}
-
-function buildWelcome(): ChatMessageType {
-  return {
-    id: "welcome",
-    role: "assistant",
-    content: WELCOME_MESSAGE,
-    timestamp: new Date(),
-    actions: [],
-  };
-}
-
-// ─── Component ────────────────────────────────────────────────────────────────
-
-export default function ChatPanel({ onClose, onMinimize, isVisible }: ChatPanelProps) {
-  const [messages, setMessages] = useState<ChatMessageType[]>(() => {
-    const persisted = loadPersistedMessages();
-    return persisted.length > 0 ? persisted : [buildWelcome()];
-  });
+export default function ChatPanel({
+  onClose,
+  onMinimize,
+  isVisible,
+}: ChatPanelProps) {
+  const [messages, setMessages] = useState<ChatMessageType[]>([]);
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
-  const [showQuickActions, setShowQuickActions] = useState(() => {
-    return loadPersistedMessages().length === 0;
-  });
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const hasInitializedRef = useRef(false);
 
-  // Auto-scroll on new messages
+  // ---------------------------------------------------------------------------
+  // INITIAL LOAD
+  // ---------------------------------------------------------------------------
+  // Load from localStorage if available; otherwise seed welcome message once.
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    if (hasInitializedRef.current) return;
 
-  // Persist messages on change
-  useEffect(() => {
-    const toSave = messages.filter((m) => !m.isTyping);
-    persistMessages(toSave);
-  }, [messages]);
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
 
-  // Focus input when panel opens
-  useEffect(() => {
-    if (isVisible) {
-      setTimeout(() => inputRef.current?.focus(), 150);
-    }
-  }, [isVisible]);
+      if (raw) {
+        const parsed = JSON.parse(raw) as ChatMessageType[];
 
-  // ESC to close
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isVisible) onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [isVisible, onClose]);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const hydrated = parsed.map((msg) => ({
+            ...msg,
+            timestamp: new Date(msg.timestamp),
+          }));
 
-  const handleSend = useCallback(
-    async (text: string) => {
-      const trimmed = text.trim();
-      if (!trimmed || isThinking) return;
-
-      setShowQuickActions(false);
-      setInput("");
-
-      // Add user message
-      const userMsg: ChatMessageType = {
-        id: uuidv4(),
-        role: "user",
-        content: trimmed,
-        timestamp: new Date(),
-      };
-
-      // Add typing indicator
-      const typingMsg: ChatMessageType = {
-        id: "typing",
-        role: "assistant",
-        content: "",
-        timestamp: new Date(),
-        isTyping: true,
-      };
-
-      setMessages((prev) => [...prev, userMsg, typingMsg]);
-      setIsThinking(true);
-
-      try {
-        const response = await sendChatMessage(trimmed, messages);
-
-        const botMsg: ChatMessageType = {
-          id: uuidv4(),
-          role: "assistant",
-          content: response.content,
-          timestamp: new Date(),
-          intent: response.intent,
-          actions: response.actions,
-        };
-
-        setMessages((prev) =>
-          prev.filter((m) => m.id !== "typing").concat(botMsg)
-        );
-      } catch {
-        const errorMsg: ChatMessageType = {
-          id: uuidv4(),
-          role: "assistant",
-          content:
-            "Sorry, something went wrong. Please call us on **0791 224513** or message on WhatsApp.",
-          timestamp: new Date(),
-          actions: [
-            { label: "Call Now", href: "tel:0791224513", variant: "primary" },
-            {
-              label: "WhatsApp",
-              href: "https://wa.me/254791224513",
-              variant: "secondary",
-            },
-          ],
-        };
-        setMessages((prev) =>
-          prev.filter((m) => m.id !== "typing").concat(errorMsg)
-        );
-      } finally {
-        setIsThinking(false);
-        setTimeout(() => inputRef.current?.focus(), 50);
+          setMessages(hydrated);
+          hasInitializedRef.current = true;
+          return;
+        }
       }
-    },
-    [isThinking, messages]
+    } catch (error) {
+      console.warn("Failed to load chat history:", error);
+    }
+
+    // No saved history -> show welcome message
+    const welcome = getWelcomeMessage();
+
+    const welcomeMessage: ChatMessageType = {
+      id: uuidv4(),
+      role: "assistant",
+      content: welcome.content,
+      timestamp: new Date(),
+      actions: welcome.actions ?? [],
+    };
+
+    setMessages([welcomeMessage]);
+    hasInitializedRef.current = true;
+  }, []);
+
+  // ---------------------------------------------------------------------------
+  // PERSIST TO LOCAL STORAGE
+  // ---------------------------------------------------------------------------
+  // Do not store temporary typing indicators.
+
+  const persistableMessages = useMemo(
+    () => messages.filter((m) => !m.isTyping),
+    [messages]
   );
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  useEffect(() => {
+    if (!hasInitializedRef.current) return;
+
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(persistableMessages));
+    } catch (error) {
+      console.warn("Failed to save chat history:", error);
+    }
+  }, [persistableMessages]);
+
+  // ---------------------------------------------------------------------------
+  // AUTO SCROLL
+  // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    if (!isVisible) return;
+
+    const id = requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "end",
+      });
+    });
+
+    return () => cancelAnimationFrame(id);
+  }, [messages, isVisible]);
+
+  // ---------------------------------------------------------------------------
+  // FOCUS INPUT WHEN OPEN
+  // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    if (!isVisible) return;
+
+    const t = setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 180);
+
+    return () => clearTimeout(t);
+  }, [isVisible]);
+
+  // ---------------------------------------------------------------------------
+  // SEND MESSAGE
+  // ---------------------------------------------------------------------------
+
+  async function handleSend(rawText?: string) {
+    const text = (rawText ?? input).trim();
+
+    if (!text || isThinking) return;
+
+    const userMsg: ChatMessageType = {
+      id: uuidv4(),
+      role: "user",
+      content: text,
+      timestamp: new Date(),
+    };
+
+    const typingMsg: ChatMessageType = {
+      id: "typing",
+      role: "assistant",
+      content: "",
+      timestamp: new Date(),
+      isTyping: true,
+    };
+
+    // IMPORTANT:
+    // Build request history BEFORE setState to avoid stale React state issues.
+    const historyForRequest = [...messages.filter((m) => !m.isTyping), userMsg];
+
+    setMessages((prev) => [...prev.filter((m) => !m.isTyping), userMsg, typingMsg]);
+    setInput("");
+    setIsThinking(true);
+
+    try {
+      const response = await sendChatMessage(text, historyForRequest);
+
+      const assistantMsg: ChatMessageType = {
+        id: uuidv4(),
+        role: "assistant",
+        content: response.content,
+        timestamp: new Date(),
+        actions: response.actions ?? [],
+      };
+
+      setMessages((prev) => [
+        ...prev.filter((m) => !m.isTyping),
+        assistantMsg,
+      ]);
+    } catch (error) {
+      console.error("Chat send failed:", error);
+
+      const errorMsg: ChatMessageType = {
+        id: uuidv4(),
+        role: "assistant",
+        content:
+          "Sorry — I’m having a little trouble right now. Please try again, or contact us directly for immediate help. 😊",
+        timestamp: new Date(),
+        actions: [],
+      };
+
+      setMessages((prev) => [
+        ...prev.filter((m) => !m.isTyping),
+        errorMsg,
+      ]);
+    } finally {
+      setIsThinking(false);
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // QUICK ACTION HANDLER
+  // ---------------------------------------------------------------------------
+
+  function handleQuickAction(label: string) {
+    if (isThinking) return;
+    void handleSend(label);
+  }
+
+  // ---------------------------------------------------------------------------
+  // ENTER TO SEND
+  // ---------------------------------------------------------------------------
+  // Enter = send
+  // Shift+Enter = newline
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSend(input);
+      void handleSend();
     }
-  };
+  }
+
+  // ---------------------------------------------------------------------------
+  // OPTIONAL: CLEAR CHAT (not shown in UI currently, but useful later)
+  // ---------------------------------------------------------------------------
+
+  function resetChat() {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (error) {
+      console.warn("Failed to clear chat history:", error);
+    }
+
+    const welcome = getWelcomeMessage();
+
+    const welcomeMessage: ChatMessageType = {
+      id: uuidv4(),
+      role: "assistant",
+      content: welcome.content,
+      timestamp: new Date(),
+      actions: welcome.actions ?? [],
+    };
+
+    setMessages([welcomeMessage]);
+    setInput("");
+    setIsThinking(false);
+  }
+
+  // Silence unused warning if you don't expose reset yet
+  void resetChat;
+
+  // ---------------------------------------------------------------------------
+  // RENDER
+  // ---------------------------------------------------------------------------
 
   return (
     <div
-      ref={panelRef}
-      role="dialog"
-      aria-label="Elparaiso Concierge chat"
-      aria-modal="true"
       className={cn(
-        "flex flex-col w-full h-full",
-        "bg-background/95 backdrop-blur-xl",
-        "rounded-2xl border border-border/60",
-        "shadow-[0_8px_60px_-10px_rgba(0,0,0,0.7)]",
-        "overflow-hidden"
+        "h-full w-full rounded-3xl border border-border/70 bg-background/95 backdrop-blur-xl shadow-2xl overflow-hidden",
+        "flex flex-col"
       )}
+      role="dialog"
+      aria-label="Elparaiso Garden chat assistant"
+      aria-modal="false"
     >
-      {/* ── Header ── */}
-      <div className="shrink-0 flex items-center justify-between px-4 py-3 bg-charcoal/90 border-b border-border/50">
-        <div className="flex items-center gap-3">
-          <div className="relative w-9 h-9 rounded-full bg-gradient-garden flex items-center justify-center shadow-sm shrink-0">
-            <span className="text-lg">🌿</span>
-            <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-garden rounded-full border-2 border-charcoal" />
+      {/* HEADER */}
+      <div className="shrink-0 px-4 py-3 border-b border-border/60 bg-charcoal/70 backdrop-blur-md">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-garden flex items-center justify-center shadow-sm shrink-0">
+              <span className="text-base">🌿</span>
+            </div>
+
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-foreground truncate">
+                  Elparaiso Assistant
+                </h3>
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-medium text-emerald-300">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  Online
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground truncate">
+                Ask about hours, reservations, location & more
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="font-display text-sm font-semibold text-foreground tracking-wide leading-tight">
-              Elparaiso Concierge
-            </p>
-            <p className="text-[10px] text-garden-light/80 leading-tight flex items-center gap-1">
-              <Sparkles size={9} className="text-amber" />
-              Always open · 24/7
-            </p>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={onMinimize}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-white/5 hover:text-foreground transition-colors"
+              aria-label="Minimize chat"
+              type="button"
+            >
+              <Minus size={16} />
+            </button>
+
+            <button
+              onClick={onClose}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-white/5 hover:text-foreground transition-colors"
+              aria-label="Close chat"
+              type="button"
+            >
+              <X size={16} />
+            </button>
           </div>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={onMinimize}
-            aria-label="Minimize chat"
-            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-border/40 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber"
-          >
-            <Minimize2 size={15} />
-          </button>
-          <button
-            onClick={onClose}
-            aria-label="Close chat"
-            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-border/40 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-amber"
-          >
-            <X size={15} />
-          </button>
         </div>
       </div>
 
-      {/* ── Messages ── */}
+      {/* QUICK ACTIONS */}
+      <div className="shrink-0 px-3 pt-3 pb-2 border-b border-border/40 bg-background/60">
+        <QuickActions onSelect={handleQuickAction} disabled={isThinking} />
+      </div>
+
+      {/* MESSAGES */}
       <div
-        className="flex-1 overflow-y-auto px-4 py-4 space-y-4 scrollbar-thin scrollbar-thumb-border/50"
+        className="flex-1 overflow-y-auto px-3 py-3 space-y-3"
         role="list"
         aria-label="Chat messages"
-        aria-live="polite"
-        aria-atomic="false"
       >
-        {messages.map((msg) => (
-          <ChatMessageBubble key={msg.id} message={msg} />
+        {messages.map((message) => (
+          <ChatMessage key={message.id} message={message} />
         ))}
+
         <div ref={messagesEndRef} />
       </div>
 
-      {/* ── Quick Actions ── */}
-      {showQuickActions && (
-        <div className="shrink-0 px-4 py-2 border-t border-border/40 bg-charcoal/30">
-          <p className="text-[10px] text-muted-foreground mb-2 font-medium uppercase tracking-wider">
-            Quick questions
-          </p>
-          <QuickActions
-            onSelect={handleSend}
-            disabled={isThinking}
-          />
-        </div>
-      )}
+      {/* INPUT */}
+      <div className="shrink-0 border-t border-border/60 bg-background/80 backdrop-blur-md p-3">
+        <div className="rounded-2xl border border-border/60 bg-charcoal/60 p-2">
+          <div className="flex items-end gap-2">
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              rows={1}
+              maxLength={500}
+              placeholder="Ask about reservations, location, hours..."
+              className={cn(
+                "flex-1 resize-none bg-transparent px-2 py-2 text-sm text-foreground placeholder:text-muted-foreground/70",
+                "focus:outline-none max-h-28 overflow-y-auto"
+              )}
+              aria-label="Type your message"
+              disabled={isThinking}
+            />
 
-      {/* ── Input ── */}
-      <div className="shrink-0 px-3 py-3 bg-charcoal/50 border-t border-border/50">
-        <div className="flex items-center gap-2 bg-background/60 border border-border/60 rounded-xl px-3 py-2 focus-within:border-amber/60 focus-within:shadow-[0_0_0_1px_hsl(var(--amber)/0.2)] transition-all">
-          <input
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={isThinking}
-            placeholder={isThinking ? "Elparaiso is typing..." : "Ask me anything…"}
-            aria-label="Type your message"
-            className={cn(
-              "flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground/60 outline-none",
-              "disabled:cursor-not-allowed disabled:opacity-60"
-            )}
-          />
-          <button
-            onClick={() => handleSend(input)}
-            disabled={!input.trim() || isThinking}
-            aria-label="Send message"
-            className={cn(
-              "shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber focus-visible:ring-offset-1",
-              input.trim() && !isThinking
-                ? "bg-gradient-fire text-primary-foreground shadow-amber hover:opacity-90"
-                : "bg-border/40 text-muted-foreground cursor-not-allowed"
-            )}
-          >
-            <Send size={14} />
-          </button>
+            <button
+              onClick={() => void handleSend()}
+              disabled={!input.trim() || isThinking}
+              className={cn(
+                "inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl transition-all duration-200",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber focus-visible:ring-offset-1",
+                input.trim() && !isThinking
+                  ? "bg-gradient-fire text-primary-foreground shadow-amber hover:opacity-90"
+                  : "bg-muted text-muted-foreground cursor-not-allowed opacity-70"
+              )}
+              aria-label="Send message"
+              type="button"
+            >
+              {isThinking ? <Sparkles size={16} className="animate-pulse" /> : <Send size={16} />}
+            </button>
+          </div>
         </div>
-        <p className="text-[9px] text-muted-foreground/40 text-center mt-1.5">
-          Elparaiso Garden Kisii · 24/7 Support
+
+        <p className="mt-2 px-1 text-[10px] text-muted-foreground/70">
+          For urgent help, call or WhatsApp the restaurant directly.
         </p>
       </div>
     </div>
   );
 }
+```

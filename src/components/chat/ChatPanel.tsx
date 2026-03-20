@@ -1,4 +1,3 @@
-```tsx id="9k2tpf"
 /**
  * ChatPanel.tsx
  * ------------------------------------------------------------------
@@ -8,10 +7,11 @@
  * - Welcome message on first load
  * - LocalStorage persistence (no backend required)
  * - Quick action chips
+ * - Assistant follow-up suggestions from chatbotService.ts
  * - Typing indicator support
  * - Prevents stale history bug when sending messages
  * - Clean scroll-to-bottom behavior
- * - Works with upgraded chatbotService.ts
+ * - Fully aligned with upgraded chatbotService.ts / types/chat.ts
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -39,15 +39,33 @@ export default function ChatPanel({
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const hasInitializedRef = useRef(false);
 
   // ---------------------------------------------------------------------------
+  // HELPERS
+  // ---------------------------------------------------------------------------
+
+  function buildWelcomeMessage(): ChatMessageType {
+    const welcome = getWelcomeMessage();
+
+    setSuggestions(welcome.suggestions ?? []);
+
+    return {
+      id: uuidv4(),
+      role: "assistant",
+      content: welcome.content,
+      timestamp: new Date(),
+      actions: welcome.actions ?? [],
+    };
+  }
+
+  // ---------------------------------------------------------------------------
   // INITIAL LOAD
   // ---------------------------------------------------------------------------
-  // Load from localStorage if available; otherwise seed welcome message once.
 
   useEffect(() => {
     if (hasInitializedRef.current) return;
@@ -59,14 +77,24 @@ export default function ChatPanel({
         const parsed = JSON.parse(raw) as ChatMessageType[];
 
         if (Array.isArray(parsed) && parsed.length > 0) {
-          const hydrated = parsed.map((msg) => ({
-            ...msg,
-            timestamp: new Date(msg.timestamp),
-          }));
+          const hydrated = parsed
+            .filter(
+              (msg) =>
+                msg &&
+                typeof msg === "object" &&
+                typeof msg.id === "string" &&
+                typeof msg.role === "string"
+            )
+            .map((msg) => ({
+              ...msg,
+              timestamp: new Date(msg.timestamp),
+            }));
 
-          setMessages(hydrated);
-          hasInitializedRef.current = true;
-          return;
+          if (hydrated.length > 0) {
+            setMessages(hydrated);
+            hasInitializedRef.current = true;
+            return;
+          }
         }
       }
     } catch (error) {
@@ -74,24 +102,13 @@ export default function ChatPanel({
     }
 
     // No saved history -> show welcome message
-    const welcome = getWelcomeMessage();
-
-    const welcomeMessage: ChatMessageType = {
-      id: uuidv4(),
-      role: "assistant",
-      content: welcome.content,
-      timestamp: new Date(),
-      actions: welcome.actions ?? [],
-    };
-
-    setMessages([welcomeMessage]);
+    setMessages([buildWelcomeMessage()]);
     hasInitializedRef.current = true;
   }, []);
 
   // ---------------------------------------------------------------------------
   // PERSIST TO LOCAL STORAGE
   // ---------------------------------------------------------------------------
-  // Do not store temporary typing indicators.
 
   const persistableMessages = useMemo(
     () => messages.filter((m) => !m.isTyping),
@@ -163,13 +180,13 @@ export default function ChatPanel({
       isTyping: true,
     };
 
-    // IMPORTANT:
     // Build request history BEFORE setState to avoid stale React state issues.
     const historyForRequest = [...messages.filter((m) => !m.isTyping), userMsg];
 
     setMessages((prev) => [...prev.filter((m) => !m.isTyping), userMsg, typingMsg]);
     setInput("");
     setIsThinking(true);
+    setSuggestions([]);
 
     try {
       const response = await sendChatMessage(text, historyForRequest);
@@ -182,10 +199,8 @@ export default function ChatPanel({
         actions: response.actions ?? [],
       };
 
-      setMessages((prev) => [
-        ...prev.filter((m) => !m.isTyping),
-        assistantMsg,
-      ]);
+      setMessages((prev) => [...prev.filter((m) => !m.isTyping), assistantMsg]);
+      setSuggestions(response.suggestions ?? []);
     } catch (error) {
       console.error("Chat send failed:", error);
 
@@ -198,10 +213,8 @@ export default function ChatPanel({
         actions: [],
       };
 
-      setMessages((prev) => [
-        ...prev.filter((m) => !m.isTyping),
-        errorMsg,
-      ]);
+      setMessages((prev) => [...prev.filter((m) => !m.isTyping), errorMsg]);
+      setSuggestions(["Are you open now?", "Where are you located?", "How do I reserve?"]);
     } finally {
       setIsThinking(false);
     }
@@ -219,8 +232,6 @@ export default function ChatPanel({
   // ---------------------------------------------------------------------------
   // ENTER TO SEND
   // ---------------------------------------------------------------------------
-  // Enter = send
-  // Shift+Enter = newline
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -230,7 +241,7 @@ export default function ChatPanel({
   }
 
   // ---------------------------------------------------------------------------
-  // OPTIONAL: CLEAR CHAT (not shown in UI currently, but useful later)
+  // OPTIONAL: CLEAR CHAT
   // ---------------------------------------------------------------------------
 
   function resetChat() {
@@ -240,17 +251,7 @@ export default function ChatPanel({
       console.warn("Failed to clear chat history:", error);
     }
 
-    const welcome = getWelcomeMessage();
-
-    const welcomeMessage: ChatMessageType = {
-      id: uuidv4(),
-      role: "assistant",
-      content: welcome.content,
-      timestamp: new Date(),
-      actions: welcome.actions ?? [],
-    };
-
-    setMessages([welcomeMessage]);
+    setMessages([buildWelcomeMessage()]);
     setInput("");
     setIsThinking(false);
   }
@@ -333,6 +334,34 @@ export default function ChatPanel({
           <ChatMessage key={message.id} message={message} />
         ))}
 
+        {/* Assistant follow-up suggestions */}
+        {!isThinking && suggestions.length > 0 && (
+          <div className="pt-1">
+            <div className="mb-2 px-1 text-[11px] font-medium text-muted-foreground">
+              Suggested questions
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {suggestions.map((suggestion, index) => (
+                <button
+                  key={`${suggestion}-${index}`}
+                  type="button"
+                  onClick={() => handleQuickAction(suggestion)}
+                  className={cn(
+                    "rounded-full px-3 py-2 text-xs font-medium transition-all duration-200",
+                    "border border-border/50 bg-background/80 text-foreground",
+                    "hover:bg-muted hover:border-border",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber focus-visible:ring-offset-1"
+                  )}
+                  aria-label={suggestion}
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 
@@ -369,7 +398,11 @@ export default function ChatPanel({
               aria-label="Send message"
               type="button"
             >
-              {isThinking ? <Sparkles size={16} className="animate-pulse" /> : <Send size={16} />}
+              {isThinking ? (
+                <Sparkles size={16} className="animate-pulse" />
+              ) : (
+                <Send size={16} />
+              )}
             </button>
           </div>
         </div>
@@ -381,4 +414,3 @@ export default function ChatPanel({
     </div>
   );
 }
-```

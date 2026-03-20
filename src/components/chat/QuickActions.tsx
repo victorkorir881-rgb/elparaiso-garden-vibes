@@ -1,37 +1,71 @@
+```tsx id="qa7m2x"
 /**
- * QuickActions.tsx — Horizontal scrolling quick-action chips.
+ * QuickActions.tsx
+ * ------------------------------------------------------------------
+ * Production-ready quick action chips for the Elparaiso Garden Kisii chatbot
+ *
+ * FEATURES:
+ * - Renders top-level suggestion chips from chatbotKnowledge.ts
+ * - Horizontal scroll on smaller screens
+ * - Disabled state while assistant is responding
+ * - Clean fallback labels if QUICK_ACTIONS is unavailable
  */
 
-import { QUICK_ACTIONS } from "@/config/chatbotKnowledge";
 import { cn } from "@/lib/utils";
+import { QUICK_ACTIONS } from "@/config/chatbotKnowledge";
 
 interface QuickActionsProps {
   onSelect: (label: string) => void;
   disabled?: boolean;
 }
 
-export default function QuickActions({ onSelect, disabled }: QuickActionsProps) {
+const FALLBACK_ACTIONS = [
+  "Opening hours",
+  "Location",
+  "Reserve a table",
+  "View menu",
+  "Contact us",
+];
+
+export default function QuickActions({
+  onSelect,
+  disabled = false,
+}: QuickActionsProps) {
+  const actions =
+    Array.isArray(QUICK_ACTIONS) && QUICK_ACTIONS.length > 0
+      ? QUICK_ACTIONS
+      : FALLBACK_ACTIONS.map((label) => ({ label }));
+
   return (
     <div
       className="flex gap-2 overflow-x-auto pb-1 scrollbar-none"
       role="group"
-      aria-label="Quick questions"
+      aria-label="Quick actions"
     >
-      {QUICK_ACTIONS.map((action) => (
-        <button
-          key={action.label}
-          onClick={() => onSelect(action.label)}
-          disabled={disabled}
-          className={cn(
-            "shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-200",
-            "border-amber/30 text-amber/90 bg-amber/5 hover:bg-amber/15 hover:border-amber/60",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber focus-visible:ring-offset-1",
-            "disabled:opacity-40 disabled:cursor-not-allowed"
-          )}
-        >
-          {action.label}
-        </button>
-      ))}
+      {actions.map((action, index) => {
+        const label = action.label;
+
+        return (
+          <button
+            key={`${label}-${index}`}
+            type="button"
+            onClick={() => onSelect(label)}
+            disabled={disabled}
+            className={cn(
+              "shrink-0 rounded-full px-3 py-2 text-xs font-medium transition-all duration-200",
+              "border border-border/50 backdrop-blur-sm",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber focus-visible:ring-offset-1",
+              disabled
+                ? "bg-muted/60 text-muted-foreground cursor-not-allowed opacity-70"
+                : "bg-background/80 text-foreground hover:bg-muted hover:border-border"
+            )}
+            aria-label={label}
+          >
+            {label}
+          </button>
+        );
+      })}
     </div>
   );
 }
+```

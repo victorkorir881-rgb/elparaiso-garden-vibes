@@ -1,4 +1,4 @@
-# 🌿 Elparaiso Garden Vibes
+# 🌿 Elparaiso Gardens
 
 <p align="center">
   <strong>A modern, responsive business website for Elparaiso Garden Kisii</strong><br/>

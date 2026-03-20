@@ -1,173 +1,178 @@
+```tsx id="c4m9tx"
 /**
- * ChatMessage.tsx — Renders a single chat message bubble.
+ * ChatMessage.tsx
+ * ------------------------------------------------------------------
+ * Production-ready message renderer for the Elparaiso Garden Kisii chatbot
  *
- * Supports:
- *  - User / assistant role styling
- *  - Markdown-lite rendering (bold, line breaks, bullet lists)
- *  - Typing indicator animation
- *  - Inline CTA action buttons
+ * FEATURES:
+ * - User / assistant bubble styling
+ * - Typing indicator animation
+ * - Action buttons under assistant messages
+ * - Safe external link handling
+ * - Time display
  */
 
-import { ChatMessage as ChatMessageType, ChatAction } from "@/types/chat";
+import type { ChatMessage as ChatMessageType, ChatAction } from "@/types/chat";
 import { cn } from "@/lib/utils";
-import { Phone, MessageCircle, MapPin, CalendarCheck } from "lucide-react";
+import { Phone, MessageCircle, ExternalLink } from "lucide-react";
 
 interface ChatMessageProps {
   message: ChatMessageType;
 }
 
-// ─── Markdown-lite renderer ────────────────────────────────────────────────────
-
-function renderContent(text: string): React.ReactNode[] {
-  const lines = text.split("\n");
-  return lines.map((line, i) => {
-    // Bold: **text**
-    const parts = line.split(/\*\*(.*?)\*\*/g);
-    const rendered = parts.map((part, j) =>
-      j % 2 === 1 ? (
-        <strong key={j} className="font-semibold text-amber">
-          {part}
-        </strong>
-      ) : (
-        <span key={j}>{part}</span>
-      )
-    );
-
-    const isListItem = line.trimStart().startsWith("•") || line.trimStart().startsWith("-");
-
-    return (
-      <span
-        key={i}
-        className={cn(
-          "block",
-          isListItem && "pl-1",
-          i > 0 && !isListItem && line.trim() === "" && "mt-1.5",
-          isListItem && "mt-0.5"
-        )}
-      >
-        {rendered}
-        {i < lines.length - 1 && line.trim() === "" && null}
-      </span>
-    );
-  });
-}
-
-// ─── Action button ────────────────────────────────────────────────────────────
-
-function ActionButton({ action }: { action: ChatAction }) {
-  const iconMap: Record<string, React.ReactNode> = {
-    "Call": <Phone size={12} />,
-    "WhatsApp": <MessageCircle size={12} />,
-    "Directions": <MapPin size={12} />,
-    "Reserve": <CalendarCheck size={12} />,
-    "Get Directions": <MapPin size={12} />,
-  };
-
-  const icon = Object.entries(iconMap).find(([key]) =>
-    action.label.includes(key)
-  )?.[1];
-
-  const handleClick = () => {
-    if (action.href) {
-      window.open(action.href, action.href.startsWith("tel:") ? "_self" : "_blank", "noopener,noreferrer");
-    } else if (action.scrollTo) {
-      const el = document.getElementById(action.scrollTo);
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
-    }
-  };
-
-  return (
-    <button
-      onClick={handleClick}
-      className={cn(
-        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber focus-visible:ring-offset-1",
-        action.variant === "primary"
-          ? "bg-gradient-fire text-primary-foreground shadow-amber hover:opacity-90"
-          : "border border-amber/40 text-amber hover:bg-amber/10"
-      )}
-    >
-      {icon && <span className="shrink-0">{icon}</span>}
-      {action.label}
-    </button>
-  );
-}
-
-// ─── Typing indicator ─────────────────────────────────────────────────────────
-
-function TypingIndicator() {
-  return (
-    <div className="flex items-center gap-1 py-1 px-1">
-      {[0, 1, 2].map((i) => (
-        <span
-          key={i}
-          className="w-2 h-2 rounded-full bg-amber/60 animate-bounce"
-          style={{ animationDelay: `${i * 150}ms`, animationDuration: "900ms" }}
-        />
-      ))}
-    </div>
-  );
-}
-
-// ─── Main component ────────────────────────────────────────────────────────────
-
 export default function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === "user";
-  const isTyping = message.isTyping;
+  const timeLabel = formatTime(message.timestamp);
 
   return (
     <div
       className={cn(
-        "flex w-full animate-fade-in",
+        "flex w-full",
         isUser ? "justify-end" : "justify-start"
       )}
       role="listitem"
     >
-      {/* Bot avatar */}
-      {!isUser && (
-        <div className="shrink-0 w-7 h-7 rounded-full bg-gradient-garden flex items-center justify-center text-sm mr-2 mt-0.5 shadow-sm">
-          🌿
-        </div>
-      )}
+      <div
+        className={cn(
+          "max-w-[88%] sm:max-w-[82%] rounded-3xl px-4 py-3 shadow-sm",
+          "transition-all duration-200",
+          isUser
+            ? "bg-gradient-fire text-primary-foreground rounded-br-lg"
+            : "bg-muted/70 text-foreground rounded-bl-lg border border-border/40"
+        )}
+      >
+        {/* Message content / typing */}
+        {message.isTyping ? (
+          <TypingIndicator />
+        ) : (
+          <div className="space-y-3">
+            <div
+              className={cn(
+                "text-sm leading-relaxed whitespace-pre-wrap break-words",
+                isUser ? "text-primary-foreground" : "text-foreground"
+              )}
+            >
+              {message.content}
+            </div>
 
-      <div className={cn("max-w-[82%] flex flex-col gap-2", isUser && "items-end")}>
-        {/* Bubble */}
-        <div
-          className={cn(
-            "px-4 py-3 rounded-2xl text-sm leading-relaxed",
-            isUser
-              ? "bg-gradient-fire text-primary-foreground rounded-br-sm shadow-amber"
-              : "bg-charcoal/80 border border-border/60 text-foreground rounded-bl-sm backdrop-blur-sm"
-          )}
-        >
-          {isTyping ? (
-            <TypingIndicator />
-          ) : (
-            <div className="space-y-0.5">{renderContent(message.content)}</div>
-          )}
-        </div>
-
-        {/* Inline CTA actions */}
-        {!isUser && !isTyping && message.actions && message.actions.length > 0 && (
-          <div className="flex flex-wrap gap-2 px-1">
-            {message.actions.map((action, i) => (
-              <ActionButton key={i} action={action} />
-            ))}
+            {/* Assistant actions */}
+            {!isUser && message.actions && message.actions.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {message.actions.map((action, index) => (
+                  <ActionButton
+                    key={`${action.label}-${index}`}
+                    action={action}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
 
         {/* Timestamp */}
-        {!isTyping && (
-          <span className="text-[10px] text-muted-foreground/60 px-1">
-            {message.timestamp.toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </span>
+        {!message.isTyping && (
+          <div
+            className={cn(
+              "mt-2 text-[10px]",
+              isUser
+                ? "text-primary-foreground/80"
+                : "text-muted-foreground"
+            )}
+          >
+            {timeLabel}
+          </div>
         )}
       </div>
     </div>
   );
 }
+
+// -----------------------------------------------------------------------------
+// ACTION BUTTON
+// -----------------------------------------------------------------------------
+
+function ActionButton({ action }: { action: ChatAction }) {
+  const href = getActionHref(action);
+  const Icon = getActionIcon(action.type);
+
+  return (
+    <a
+      href={href}
+      target={action.type === "link" ? "_blank" : undefined}
+      rel={action.type === "link" ? "noopener noreferrer" : undefined}
+      className={cn(
+        "inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium",
+        "border border-border/50 bg-background/80 text-foreground",
+        "hover:bg-background transition-colors"
+      )}
+      aria-label={action.label}
+    >
+      <Icon size={14} />
+      <span>{action.label}</span>
+    </a>
+  );
+}
+
+function getActionHref(action: ChatAction): string {
+  switch (action.type) {
+    case "phone":
+      return `tel:${sanitizePhone(action.value)}`;
+
+    case "whatsapp":
+      return `https://wa.me/${sanitizePhone(action.value)}`;
+
+    case "link":
+    default:
+      return action.value;
+  }
+}
+
+function getActionIcon(type: ChatAction["type"]) {
+  switch (type) {
+    case "phone":
+      return Phone;
+    case "whatsapp":
+      return MessageCircle;
+    case "link":
+    default:
+      return ExternalLink;
+  }
+}
+
+function sanitizePhone(value: string): string {
+  // Keeps digits only, removes spaces, dashes, plus signs, etc.
+  // Example: "+254 712 345 678" -> "254712345678"
+  return value.replace(/[^\d]/g, "");
+}
+
+// -----------------------------------------------------------------------------
+// TYPING INDICATOR
+// -----------------------------------------------------------------------------
+
+function TypingIndicator() {
+  return (
+    <div className="flex items-center gap-1 py-1" aria-label="Assistant is typing">
+      <span className="sr-only">Assistant is typing</span>
+
+      <span className="h-2 w-2 rounded-full bg-muted-foreground/70 animate-bounce [animation-delay:-0.3s]" />
+      <span className="h-2 w-2 rounded-full bg-muted-foreground/70 animate-bounce [animation-delay:-0.15s]" />
+      <span className="h-2 w-2 rounded-full bg-muted-foreground/70 animate-bounce" />
+    </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// TIME FORMAT
+// -----------------------------------------------------------------------------
+
+function formatTime(value: Date | string): string {
+  const date = value instanceof Date ? value : new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "";
+
+  return date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+```

@@ -12,13 +12,35 @@
  */
 
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-import {
-  ChatFaq,
-  ChatConversation,
-  ChatRole,
-  ChatIntent,
-  ReservationLeadPayload,
-} from "@/types/chat";
+import type { ChatRole, ChatIntent } from "@/types/chat";
+
+// Local types — no longer exported from chat.ts
+interface ChatConversation {
+  id: string;
+  session_id: string;
+}
+
+interface ChatFaq {
+  id: string;
+  intent: string;
+  question: string;
+  answer: string;
+  keywords: string[];
+  suggestions?: string[];
+  actions?: unknown[];
+  priority: number;
+  is_active?: boolean;
+}
+
+interface ReservationLeadPayload {
+  name: string;
+  phone: string;
+  date?: string;
+  time?: string;
+  party_size?: number;
+  notes?: string;
+  source?: string;
+}
 
 // ─── Conversations ───────────────────────────────────────────────────────────
 

@@ -1,14 +1,7 @@
-```tsx id="qa7m2x"
 /**
  * QuickActions.tsx
  * ------------------------------------------------------------------
- * Production-ready quick action chips for the Elparaiso Garden Kisii chatbot
- *
- * FEATURES:
- * - Renders top-level suggestion chips from chatbotKnowledge.ts
- * - Horizontal scroll on smaller screens
- * - Disabled state while assistant is responding
- * - Clean fallback labels if QUICK_ACTIONS is unavailable
+ * Quick action chips for the Elparaiso Garden Kisii chatbot
  */
 
 import { cn } from "@/lib/utils";
@@ -68,4 +61,3 @@ export default function QuickActions({
     </div>
   );
 }
-```

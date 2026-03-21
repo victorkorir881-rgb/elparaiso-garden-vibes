@@ -3,11 +3,12 @@
  * ─────────────────────────────────────────────────────────────────────────────
  * Production-ready local knowledge base for Elparaiso Garden Kisii chatbot.
  *
- * UPDATED FIXES:
- * - Safer, score-based intent detection (no more brittle first-match wins)
- * - Removed dangerous generic triggers like "where" and "table"
- * - Better phrase weighting for natural restaurant questions
- * - Stronger fallback behavior
+ * FINAL UPGRADED FIXES:
+ * - Safer, score-based intent detection (no brittle first-match wins)
+ * - Better handling for short one-word queries (e.g. "drinks", "menu", "parking")
+ * - Exact keyword match bonus for chatbot-style prompts
+ * - Better punctuation / apostrophe normalization
+ * - Stronger natural language phrase scoring
  * - Preserves all real business details and existing FAQ content
  */
 
@@ -339,6 +340,8 @@ export const LOCAL_FAQS: ChatFaq[] = [
       "which street",
       "pin",
       "send location",
+      "exact location",
+      "where exactly are you",
     ],
     suggestions: [
       "Is there parking?",
@@ -372,6 +375,7 @@ export const LOCAL_FAQS: ChatFaq[] = [
       "show me the way",
       "map",
       "gps",
+      "how can i get there",
     ],
     suggestions: ["Is there parking?", "Are you open now?"],
     actions: [CHATBOT_ACTIONS.directions, CHATBOT_ACTIONS.whatsapp],
@@ -495,6 +499,7 @@ export const LOCAL_FAQS: ChatFaq[] = [
       "dinner",
       "breakfast",
       "something to eat",
+      "food menu",
     ],
     suggestions: [
       "Do you serve drinks?",
@@ -667,6 +672,7 @@ export const LOCAL_FAQS: ChatFaq[] = [
       "access by car",
       "drive there",
       "safe parking",
+      "park there",
     ],
     suggestions: [
       "Where are you located?",
@@ -844,6 +850,8 @@ export const LOCAL_FAQS: ChatFaq[] = [
       "special occasion",
       "special event",
       "milestone",
+      "birthday",
+      "party",
     ],
     suggestions: ["How do I reserve?", "How can I contact you?"],
     actions: [
@@ -1032,6 +1040,7 @@ export const LOCAL_FAQS: ChatFaq[] = [
       "on my way",
       "be there",
       "see you tonight",
+      "come tonight",
     ],
     suggestions: [
       "How do I reserve?",
@@ -1082,7 +1091,8 @@ export function normaliseForMatching(input: string): string {
   return input
     .toLowerCase()
     .trim()
-    .replace(/[^\w\s-]/g, " ")
+    .replace(/[’']/g, "") // remove apostrophes
+    .replace(/[^\w\s-]/g, " ") // remove punctuation
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -1101,12 +1111,14 @@ function includesPhrase(text: string, phrase: string): boolean {
 function keywordWeight(keyword: string): number {
   const tokens = keyword.trim().split(/\s+/).filter(Boolean).length;
 
-  if (tokens >= 4) return 5;
-  if (tokens === 3) return 4;
-  if (tokens === 2) return 3;
+  if (tokens >= 4) return 6;
+  if (tokens === 3) return 5;
+  if (tokens === 2) return 4;
 
-  if (keyword.length >= 8) return 2;
-  return 1;
+  if (keyword.length >= 8) return 3;
+  if (keyword.length >= 5) return 2;
+
+  return 1.25;
 }
 
 function scoreFaq(text: string, faq: ChatFaq): number {
@@ -1116,6 +1128,12 @@ function scoreFaq(text: string, faq: ChatFaq): number {
     const keyword = kw.toLowerCase().trim();
     if (!keyword) continue;
 
+    // exact one-word or exact phrase match boost
+    if (text === keyword) {
+      score += 8;
+      continue;
+    }
+
     if (includesPhrase(text, keyword)) {
       score += keywordWeight(keyword);
     }
@@ -1124,7 +1142,17 @@ function scoreFaq(text: string, faq: ChatFaq): number {
   // Representative question bonus
   const question = faq.question.toLowerCase().trim();
   if (question && includesPhrase(text, question)) {
-    score += 4;
+    score += 5;
+  }
+
+  // Short query boost (important for chatbot chips / quick asks)
+  if (text.length <= 20) {
+    for (const kw of faq.keywords) {
+      if (text.includes(kw.toLowerCase())) {
+        score += 2;
+        break;
+      }
+    }
   }
 
   // Intent-specific contextual bonuses
@@ -1137,10 +1165,9 @@ function intentSignalBonus(text: string, intent: ChatIntent): number {
   switch (intent) {
     case "reservation":
       if (
-        (text.includes("table") &&
-          (text.includes("book") ||
-            text.includes("reserve") ||
-            text.includes("reservation"))) ||
+        text.includes("book") ||
+        text.includes("reserve") ||
+        text.includes("reservation") ||
         text.includes("book a table") ||
         text.includes("reserve a table") ||
         text.includes("make a reservation")
@@ -1154,7 +1181,8 @@ function intentSignalBonus(text: string, intent: ChatIntent): number {
         text.includes("walk in") ||
         text.includes("walk-in") ||
         text.includes("without reservation") ||
-        text.includes("can i just come")
+        text.includes("can i just come") ||
+        text.includes("just arrive")
       ) {
         return 4;
       }
@@ -1162,11 +1190,11 @@ function intentSignalBonus(text: string, intent: ChatIntent): number {
 
     case "hours":
       if (
-        text.includes("are you open now") ||
-        text.includes("open now") ||
+        text.includes("open") ||
+        text.includes("close") ||
+        text.includes("hours") ||
         text.includes("what time") ||
-        text.includes("when do you open") ||
-        text.includes("when do you close") ||
+        text.includes("24 7") ||
         text.includes("24/7")
       ) {
         return 4;
@@ -1180,7 +1208,8 @@ function intentSignalBonus(text: string, intent: ChatIntent): number {
         text.includes("all night") ||
         text.includes("2am") ||
         text.includes("3am") ||
-        text.includes("4am")
+        text.includes("4am") ||
+        text.includes("midnight")
       ) {
         return 4;
       }
@@ -1188,10 +1217,11 @@ function intentSignalBonus(text: string, intent: ChatIntent): number {
 
     case "location":
       if (
-        text.includes("where are you located") ||
-        text.includes("your address") ||
-        text.includes("send location") ||
-        text.includes("county government street")
+        text.includes("where") ||
+        text.includes("location") ||
+        text.includes("address") ||
+        text.includes("county government street") ||
+        text.includes("send location")
       ) {
         return 4;
       }
@@ -1199,10 +1229,12 @@ function intentSignalBonus(text: string, intent: ChatIntent): number {
 
     case "directions":
       if (
-        text.includes("how do i get") ||
         text.includes("directions") ||
+        text.includes("how do i get") ||
+        text.includes("how to get") ||
         text.includes("google maps") ||
-        text.includes("route")
+        text.includes("route") ||
+        text.includes("navigate")
       ) {
         return 4;
       }
@@ -1210,10 +1242,10 @@ function intentSignalBonus(text: string, intent: ChatIntent): number {
 
     case "parking":
       if (
+        text.includes("parking") ||
+        text.includes("park") ||
         text.includes("where can i park") ||
-        text.includes("where to park") ||
-        text.includes("do you have parking") ||
-        text.includes("parking space")
+        text.includes("where to park")
       ) {
         return 4;
       }
@@ -1221,10 +1253,13 @@ function intentSignalBonus(text: string, intent: ChatIntent): number {
 
     case "drinks":
       if (
-        text.includes("drinks menu") ||
-        text.includes("do you serve drinks") ||
-        text.includes("do you have alcohol") ||
-        text.includes("just for drinks")
+        text.includes("drink") ||
+        text.includes("drinks") ||
+        text.includes("bar") ||
+        text.includes("alcohol") ||
+        text.includes("beer") ||
+        text.includes("cocktail") ||
+        text.includes("cocktails")
       ) {
         return 4;
       }
@@ -1232,10 +1267,12 @@ function intentSignalBonus(text: string, intent: ChatIntent): number {
 
     case "menu":
       if (
-        text.includes("what's on the menu") ||
-        text.includes("what is on the menu") ||
-        text.includes("what food do you serve") ||
-        text.includes("something to eat")
+        text.includes("menu") ||
+        text.includes("food") ||
+        text.includes("eat") ||
+        text.includes("meal") ||
+        text.includes("nyama") ||
+        text.includes("choma")
       ) {
         return 4;
       }
@@ -1246,7 +1283,8 @@ function intentSignalBonus(text: string, intent: ChatIntent): number {
         text.includes("group booking") ||
         text.includes("large group") ||
         text.includes("many people") ||
-        text.includes("large table")
+        text.includes("large table") ||
+        text.includes("corporate")
       ) {
         return 4;
       }
@@ -1254,9 +1292,11 @@ function intentSignalBonus(text: string, intent: ChatIntent): number {
 
     case "celebrations":
       if (
-        text.includes("birthday celebration") ||
-        text.includes("celebrate birthday") ||
-        text.includes("special occasion")
+        text.includes("birthday") ||
+        text.includes("party") ||
+        text.includes("celebrate") ||
+        text.includes("special occasion") ||
+        text.includes("engagement")
       ) {
         return 4;
       }
@@ -1264,10 +1304,47 @@ function intentSignalBonus(text: string, intent: ChatIntent): number {
 
     case "events":
       if (
+        text.includes("event") ||
+        text.includes("events") ||
         text.includes("live music") ||
         text.includes("dj") ||
         text.includes("football match") ||
-        text.includes("what's on")
+        text.includes("whats happening")
+      ) {
+        return 4;
+      }
+      return 0;
+
+    case "delivery":
+      if (
+        text.includes("delivery") ||
+        text.includes("takeaway") ||
+        text.includes("take out") ||
+        text.includes("pickup") ||
+        text.includes("pick up")
+      ) {
+        return 4;
+      }
+      return 0;
+
+    case "wifi":
+      if (
+        text.includes("wifi") ||
+        text.includes("wi-fi") ||
+        text.includes("internet") ||
+        text.includes("network")
+      ) {
+        return 4;
+      }
+      return 0;
+
+    case "contact":
+      if (
+        text.includes("contact") ||
+        text.includes("call") ||
+        text.includes("phone") ||
+        text.includes("whatsapp") ||
+        text.includes("number")
       ) {
         return 4;
       }
@@ -1279,18 +1356,9 @@ function intentSignalBonus(text: string, intent: ChatIntent): number {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// INTENT DETECTION (UPDATED: score-based, safer)
+// INTENT DETECTION (FINAL: score-based, smarter)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Safer intent detection using score-based FAQ matching.
- *
- * Why this is better than first-match:
- * - avoids "where" forcing location
- * - avoids "table" forcing reservation
- * - avoids "open" alone forcing hours
- * - better for natural phrasing
- */
 export function detectLocalIntent(input: string): ChatIntent {
   const text = normaliseForMatching(input);
 
@@ -1318,8 +1386,8 @@ export function detectLocalIntent(input: string): ChatIntent {
     }
   }
 
-  // Confidence threshold to avoid weak false positives
-  if (bestScore < 2) {
+  // Slightly stricter threshold to reduce false positives
+  if (bestScore < 2.5) {
     return "fallback";
   }
 

@@ -39,7 +39,7 @@ const BUSINESS = {
   name: "Elparaiso Garden Kisii",
   type: "bar, grill, restaurant, chill spot — 24-hour social venue",
   hours: "Open 24 hours a day, 7 days a week including weekends and public holidays",
-  location: "County Government Street, Kisii, Kenya",
+  location: "Along County Government Street Road, Kisii, Kenya",
   phone: "0791 224513",
   phoneIntl: "+254791224513",
   whatsapp: "+254791224513",
@@ -59,7 +59,7 @@ const BUSINESS = {
     "Reservations accepted (phone, WhatsApp, online form)",
     "Walk-ins welcome",
     "Group bookings and celebrations catered for",
-    "Wheelchair-accessible toilet",
+    "Wheelchair-accessible",
     "NFC mobile payments and debit cards accepted",
     "Table service",
   ],
@@ -163,6 +163,7 @@ serve(async (req: Request) => {
     const result = await chat.sendMessage(message);
     clearTimeout(timeout);
 
+    //remove extra wordings from gemini response
     const responseText = result.response.text();
     const parsed = safeParseResponse(responseText);
 

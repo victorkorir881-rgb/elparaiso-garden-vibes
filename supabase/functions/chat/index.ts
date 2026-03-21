@@ -1,27 +1,19 @@
 /**
- * supabase/functions/chat/index.ts
- * ─────────────────────────────────────────────────────────────────────────────
- * Elparaiso Garden Kisii — AI Concierge Edge Function
- * * Access: Updated to use GOOGLE_GENERATIVE_AI_API_KEY directly.
+ * elparaiso ai concierge main file
+ * uses gemini gemini-1.5-flash because it is cheaper and has high message ratings
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai@0.21.0";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CORS
-// ─────────────────────────────────────────────────────────────────────────────
-
+// allow frontend to talk to this function without cors issues
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TYPES
-// ─────────────────────────────────────────────────────────────────────────────
-
+// simple types so typescript doesn't break
 type ChatActionType = "link" | "phone" | "whatsapp";
 
 interface ChatAction {
@@ -42,10 +34,7 @@ interface HistoryMessage {
   content: string;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// BUSINESS KNOWLEDGE
-// ─────────────────────────────────────────────────────────────────────────────
-
+// all elparaiso information, acts as the brain of the bot
 const BUSINESS = {
   name: "Elparaiso Garden Kisii",
   type: "bar, grill, restaurant, chill spot — 24-hour social venue",
@@ -76,10 +65,7 @@ const BUSINESS = {
   ],
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SYSTEM PROMPT
-// ─────────────────────────────────────────────────────────────────────────────
-
+// set ai personality and ensure it outputs json
 function buildSystemPrompt(): string {
   return `You are the official concierge assistant for ${BUSINESS.name}.
 LOCATION: ${BUSINESS.location}
@@ -109,12 +95,9 @@ AVAILABLE ACTIONS:
 - Directions: {"label":"Get Directions","type":"link","value":"${BUSINESS.mapsLink}"}`;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// HELPERS
-// ─────────────────────────────────────────────────────────────────────────────
-
+// if the ai crashes or times out, show this so the user isnt stuck
 function buildFallback(reason?: string): ChatbotResponse {
-  console.warn("[chat] Returning fallback:", reason ?? "unknown");
+  console.warn("returning fallback because:", reason ?? "unknown error");
   return {
     content: "I'm having a little trouble answering right now, but I'd still love to help. Please call us or send us a WhatsApp message for quick assistance. 😊",
     actions: [
@@ -126,31 +109,30 @@ function buildFallback(reason?: string): ChatbotResponse {
   };
 }
 
+// prevent gemini from adding markdowns(.md)
 function safeParseResponse(raw: string): ChatbotResponse | null {
   try {
     const cleaned = raw.replace(/```json/g, "").replace(/```/g, "").trim();
     return JSON.parse(cleaned);
   } catch (e) {
-    console.error("[chat] Parse error:", e);
+    console.error("failed to parse ai response:", e);
     return null;
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// HANDLER
-// ─────────────────────────────────────────────────────────────────────────────
-
+// main entry point for the edge function
 serve(async (req: Request) => {
+  // handle preflight requests
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
     const { message, history: rawHistory } = await req.json();
     
-    // Validate API Key
+    // make sure the key is available
     const apiKey = Deno.env.get("GOOGLE_GENERATIVE_AI_API_KEY");
-    if (!apiKey) throw new Error("API Key missing");
+    if (!apiKey) throw new Error("env key is missing");
 
-    // Initialize Google AI
+    // setup the gemini client
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ 
       model: "gemini-1.5-flash",
@@ -162,7 +144,7 @@ serve(async (req: Request) => {
       }
     });
 
-    // Map history turns (Max 6)
+    // grab the last 6 messages and swap 'assistant' to 'model' for gemini compatibility
     const history = (rawHistory || [])
       .filter((m: HistoryMessage) => m.content && m.role)
       .slice(-6)
@@ -171,10 +153,10 @@ serve(async (req: Request) => {
         parts: [{ text: m.content }],
       }));
 
-    // Start Chat
+    // send the message to google
     const chat = model.startChat({ history });
     
-    // Handle request with timeout
+    // dont let the request hang longer than 8 seconds
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
 
@@ -184,15 +166,16 @@ serve(async (req: Request) => {
     const responseText = result.response.text();
     const parsed = safeParseResponse(responseText);
 
-    if (!parsed) throw new Error("Invalid AI format");
+    if (!parsed) throw new Error("ai didn't return valid json");
 
+    // ship it back to the website
     return new Response(JSON.stringify(parsed), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
   } catch (err) {
-    console.error("[chat] Request failed:", err.message);
+    console.error("something went wrong in the chat flow:", err.message);
     return new Response(
       JSON.stringify(buildFallback(err.message)),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }

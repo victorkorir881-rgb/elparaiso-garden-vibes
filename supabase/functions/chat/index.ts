@@ -1,39 +1,20 @@
 /**
- * supabase/functions/chat/index.ts
- * ─────────────────────────────────────────────────────────────────────────────
- * Elparaiso Garden Kisii — AI Concierge Edge Function
- *
- * Architecture:
- *  - Receives: { message: string, history?: {role, content}[] }
- *  - Calls Lovable AI Gateway (OpenAI-compatible) server-side only
- *  - Returns: ChatbotResponse { content, actions?, suggestions?, intent? }
- *  - API key NEVER reaches the browser
- *
- * Cost / Latency optimisations:
- *  - Uses google/gemini-3-flash-preview (fast + cheap)
- *  - History trimmed to last 6 turns max before sending
- *  - System prompt is compact but complete
- *  - max_tokens capped at 300 (enough for concierge replies)
- *  - temperature 0.3 for reliable, low-variance responses
- *  - 8-second server-side timeout with graceful fallback
+ * elparaiso garden kisii — ai concierge
+ * note: swapped lovable gateway for direct google ai (gemini 1.5 flash).
+ * the api key needs to be in your supabase/vercel env vars.
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { GoogleGenerativeAI } from "https://esm.sh/@google/generative-ai@0.21.0";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CORS
-// ─────────────────────────────────────────────────────────────────────────────
-
+// handling cors so the browser doesn't block the request
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TYPES (mirrored from src/types/chat.ts — kept minimal for edge runtime)
-// ─────────────────────────────────────────────────────────────────────────────
-
+// basic types for the chat structure
 type ChatActionType = "link" | "phone" | "whatsapp";
 
 interface ChatAction {
@@ -49,10 +30,12 @@ interface ChatbotResponse {
   intent?: string;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// BUSINESS KNOWLEDGE — single source of truth for the system prompt
-// ─────────────────────────────────────────────────────────────────────────────
+interface HistoryMessage {
+  role: "user" | "assistant";
+  content: string;
+}
 
+// business details for the prompt. update these if things change on-site.
 const BUSINESS = {
   name: "Elparaiso Garden Kisii",
   type: "bar, grill, restaurant, chill spot — 24-hour social venue",
@@ -66,7 +49,6 @@ const BUSINESS = {
   reservationAnchor: "#reservation",
   menuAnchor: "#menu",
 
-  // Verified facts only — never claim what is not confirmed
   confirmedFeatures: [
     "Open 24/7",
     "Full bar (beer, wine, cocktails, spirits, soft drinks)",
@@ -82,298 +64,118 @@ const BUSINESS = {
     "NFC mobile payments and debit cards accepted",
     "Table service",
   ],
-
-  // Uncertain — always say to confirm via phone/WhatsApp
-  unconfirmedTopics: [
-    "Wi-Fi availability",
-    "Exact delivery coverage/radius",
-    "Exact current menu pricing",
-    "Exact event schedule or live music dates",
-  ],
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SYSTEM PROMPT (compact — optimised for cost)
-// ─────────────────────────────────────────────────────────────────────────────
-
+// this builds the system instructions for gemini. keep it strict on json.
 function buildSystemPrompt(): string {
-  return `You are the official concierge assistant for ${BUSINESS.name}, a ${BUSINESS.type} located at ${BUSINESS.location}.
-
+  return `You are the official concierge assistant for ${BUSINESS.name}.
+LOCATION: ${BUSINESS.location}
 HOURS: ${BUSINESS.hours}
-PHONE: ${BUSINESS.phone} (${BUSINESS.phoneIntl})
-WHATSAPP: ${BUSINESS.whatsapp}
+CONTACT: ${BUSINESS.phone} / ${BUSINESS.whatsapp}
 
 CONFIRMED FEATURES:
 ${BUSINESS.confirmedFeatures.map((f) => `- ${f}`).join("\n")}
 
 RULES:
-1. Answer naturally, warmly, and concisely (2-4 sentences usually). Never robotic.
-2. ONLY use facts listed above. Do NOT invent menu items, prices, or services.
-3. For uncertain topics (Wi-Fi, exact delivery, pricing, event schedule), say to call or WhatsApp to confirm.
-4. If asked multiple questions, answer all of them in one reply.
-5. Handle typos, slang, informal wording gracefully.
-6. When appropriate, nudge toward reservations, calls, or WhatsApp.
-7. You MUST respond with valid JSON only — no prose outside JSON.
+1. Answer naturally, warmly, and concisely (2-3 sentences).
+2. ONLY use facts listed above. For prices/delivery, ask them to Call/WhatsApp.
+3. You MUST respond with valid JSON only.
 
-RESPONSE FORMAT (strict JSON):
+RESPONSE FORMAT:
 {
-  "content": "Your reply here",
-  "intent": one of: hours|location|reservation|menu|contact|delivery|parking|ambience|group_booking|payment|family|drinks|events|wifi|fallback,
+  "content": "Your reply",
+  "intent": "hours|location|reservation|menu|contact|delivery|parking|payment|drinks|fallback",
   "actions": [{"label":"...", "type":"phone|whatsapp|link", "value":"..."}],
-  "suggestions": ["follow-up question 1", "follow-up question 2"]
+  "suggestions": ["question 1", "question 2"]
 }
 
-AVAILABLE ACTIONS (use relevant ones only, 1-3 max):
+AVAILABLE ACTIONS:
 - Call Now: {"label":"Call Now","type":"phone","value":"${BUSINESS.phoneIntl}"}
 - WhatsApp: {"label":"WhatsApp","type":"whatsapp","value":"${BUSINESS.phoneIntl}"}
 - Reserve: {"label":"Reserve a Table","type":"link","value":"${BUSINESS.reservationAnchor}"}
-- Menu: {"label":"View Menu","type":"link","value":"${BUSINESS.menuAnchor}"}
-- Directions: {"label":"Get Directions","type":"link","value":"${BUSINESS.mapsLink}"}
-
-Keep responses friendly, premium, brief. No hallucinations.`;
+- Directions: {"label":"Get Directions","type":"link","value":"${BUSINESS.mapsLink}"}`;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// FALLBACK RESPONSE
-// ─────────────────────────────────────────────────────────────────────────────
-
+// basic safety net if the ai fails for some reason
 function buildFallback(reason?: string): ChatbotResponse {
-  console.warn("[chat] Returning fallback:", reason ?? "unknown");
+  console.warn("fallback triggered:", reason ?? "unknown");
   return {
-    content:
-      "I'm having a little trouble answering right now, but I'd still love to help. Please call us or send us a WhatsApp message for quick assistance. 😊",
+    content: "I'm having a little trouble answering right now, but I'd still love to help. Please call us or send us a WhatsApp message for quick assistance. 😊",
     actions: [
       { label: "Call Now", type: "phone", value: BUSINESS.phoneIntl },
       { label: "WhatsApp", type: "whatsapp", value: BUSINESS.phoneIntl },
     ],
-    suggestions: ["Are you open now?", "Where are you located?", "How do I reserve?"],
+    suggestions: ["Are you open now?", "Where are you located?"],
     intent: "fallback",
   };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SAFE JSON PARSE
-// ─────────────────────────────────────────────────────────────────────────────
-
+// cleaning up the raw string in case gemini adds markdown syntax
 function safeParseResponse(raw: string): ChatbotResponse | null {
-  // Strip markdown code fences if model wraps output
-  const cleaned = raw
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/\s*```$/i, "")
-    .trim();
-
   try {
-    const parsed = JSON.parse(cleaned);
-
-    if (typeof parsed?.content !== "string" || !parsed.content.trim()) {
-      return null;
-    }
-
-    const result: ChatbotResponse = {
-      content: parsed.content.trim(),
-      intent: typeof parsed.intent === "string" ? parsed.intent : "fallback",
-    };
-
-    if (Array.isArray(parsed.actions)) {
-      result.actions = parsed.actions.filter(
-        (a: unknown) =>
-          typeof (a as ChatAction)?.label === "string" &&
-          typeof (a as ChatAction)?.type === "string" &&
-          typeof (a as ChatAction)?.value === "string"
-      );
-    }
-
-    if (Array.isArray(parsed.suggestions)) {
-      result.suggestions = parsed.suggestions.filter(
-        (s: unknown) => typeof s === "string"
-      );
-    }
-
-    return result;
-  } catch {
-    // Model returned non-JSON prose — extract text and wrap safely
-    if (cleaned.length > 0) {
-      return {
-        content: cleaned.slice(0, 600),
-        intent: "fallback",
-        actions: [
-          { label: "Call Now", type: "phone", value: BUSINESS.phoneIntl },
-          { label: "WhatsApp", type: "whatsapp", value: BUSINESS.phoneIntl },
-        ],
-        suggestions: ["Are you open now?", "Where are you located?"],
-      };
-    }
+    const cleaned = raw.replace(/```json/g, "").replace(/```/g, "").trim();
+    return JSON.parse(cleaned);
+  } catch (e) {
+    console.error("json parse failed:", e);
     return null;
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TRIM HISTORY (cost / latency optimisation)
-// ─────────────────────────────────────────────────────────────────────────────
-
-const MAX_HISTORY_TURNS = 6; // 3 user + 3 assistant
-
-interface HistoryMessage {
-  role: "user" | "assistant";
-  content: string;
-}
-
-function trimHistory(history: HistoryMessage[]): HistoryMessage[] {
-  if (!Array.isArray(history)) return [];
-
-  // Only keep user/assistant messages, strip typing indicators, cap length
-  const clean = history
-    .filter(
-      (m) =>
-        (m.role === "user" || m.role === "assistant") &&
-        typeof m.content === "string" &&
-        m.content.trim().length > 0
-    )
-    .slice(-MAX_HISTORY_TURNS);
-
-  return clean.map((m) => ({
-    role: m.role,
-    content: m.content.trim().slice(0, 500), // cap per-message length
-  }));
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// HANDLER
-// ─────────────────────────────────────────────────────────────────────────────
-
+// logic starts here
 serve(async (req: Request) => {
-  // CORS preflight
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
-
-  // Only POST
-  if (req.method !== "POST") {
-    return new Response(
-      JSON.stringify({ error: "Method not allowed" }),
-      { status: 405, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-
-  // Parse & validate body
-  let message: string;
-  let rawHistory: HistoryMessage[] = [];
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const body = await req.json();
+    const { message, history: rawHistory } = await req.json();
+    
+    // check for the api key in env
+    const apiKey = Deno.env.get("GOOGLE_GENERATIVE_AI_API_KEY");
+    if (!apiKey) throw new Error("no api key found");
 
-    if (typeof body?.message !== "string" || !body.message.trim()) {
-      return new Response(
-        JSON.stringify(buildFallback("empty message")),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    message = body.message.trim().slice(0, 800); // input cap
-    rawHistory = Array.isArray(body.history) ? body.history : [];
-  } catch {
-    return new Response(
-      JSON.stringify(buildFallback("invalid JSON body")),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-
-  // Get API key
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) {
-    console.error("[chat] LOVABLE_API_KEY not set");
-    return new Response(
-      JSON.stringify(buildFallback("config error")),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-
-  // Build messages array
-  const history = trimHistory(rawHistory);
-  const messages = [
-    { role: "system", content: buildSystemPrompt() },
-    ...history,
-    { role: "user", content: message },
-  ];
-
-  // Call Lovable AI Gateway with timeout
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
-
-  try {
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages,
+    // config for the gemini model
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ 
+      model: "gemini-1.5-flash",
+      systemInstruction: buildSystemPrompt(),
+      generationConfig: {
         temperature: 0.3,
-        max_tokens: 300,
-      }),
+        maxOutputTokens: 400,
+        responseMimeType: "application/json",
+      }
     });
 
+    // trim history and fix roles for google's sdk
+    const history = (rawHistory || [])
+      .filter((m: HistoryMessage) => m.content && m.role)
+      .slice(-6)
+      .map((m: HistoryMessage) => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }],
+      }));
+
+    const chat = model.startChat({ history });
+    
+    // setting an 8 second limit so the user doesn't wait forever
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
+    const result = await chat.sendMessage(message);
     clearTimeout(timeout);
 
-    if (response.status === 429) {
-      console.warn("[chat] Rate limited");
-      return new Response(
-        JSON.stringify(buildFallback("rate limited")),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const responseText = result.response.text();
+    const parsed = safeParseResponse(responseText);
 
-    if (response.status === 402) {
-      console.warn("[chat] Payment required");
-      return new Response(
-        JSON.stringify(buildFallback("credits exhausted")),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    if (!response.ok) {
-      const errText = await response.text().catch(() => "");
-      console.error("[chat] AI gateway error:", response.status, errText);
-      return new Response(
-        JSON.stringify(buildFallback(`gateway ${response.status}`)),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const data = await response.json();
-    const rawContent: string = data?.choices?.[0]?.message?.content ?? "";
-
-    if (!rawContent.trim()) {
-      return new Response(
-        JSON.stringify(buildFallback("empty model response")),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const parsed = safeParseResponse(rawContent);
-
-    if (!parsed) {
-      return new Response(
-        JSON.stringify(buildFallback("parse failure")),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    if (!parsed) throw new Error("response was not valid json");
 
     return new Response(JSON.stringify(parsed), {
       status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+
   } catch (err) {
-    clearTimeout(timeout);
-
-    const isTimeout = err instanceof Error && err.name === "AbortError";
-    console.error("[chat] Request failed:", isTimeout ? "timeout" : err);
-
+    console.error("chat error:", err.message);
     return new Response(
-      JSON.stringify(buildFallback(isTimeout ? "timeout" : "network error")),
+      JSON.stringify(buildFallback(err.message)),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

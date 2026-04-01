@@ -74,10 +74,34 @@ function buildHistoryPayload(
 // Ensures the shape from the edge function is always valid for the UI.
 // ─────────────────────────────────────────────────────────────────────────────
 
+function tryExtractFromJsonString(text: string): Record<string, unknown> | null {
+  try {
+    // Find the first { and last } to handle cases where AI prepends/appends text
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start === -1 || end === -1 || end <= start) return null;
+    const parsed = JSON.parse(text.slice(start, end + 1));
+    if (typeof parsed === "object" && parsed !== null && typeof parsed.content === "string") {
+      return parsed as Record<string, unknown>;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function normaliseResponse(raw: unknown): ChatbotResponse {
   if (!raw || typeof raw !== "object") return buildFallback();
 
-  const r = raw as Record<string, unknown>;
+  let r = raw as Record<string, unknown>;
+
+  // Safety: if `content` itself is a JSON string containing the real response, unwrap it
+  if (typeof r.content === "string") {
+    const maybeNested = tryExtractFromJsonString(r.content);
+    if (maybeNested) {
+      r = maybeNested;
+    }
+  }
 
   if (typeof r.content !== "string" || !r.content.trim()) return buildFallback();
 

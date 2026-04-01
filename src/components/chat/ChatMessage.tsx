@@ -17,6 +17,17 @@ import type { ChatMessage as ChatMessageType, ChatAction } from "@/types/chat";
 import { cn } from "@/lib/utils";
 import { Phone, MessageCircle, ExternalLink } from "lucide-react";
 
+/** Converts **bold**, *italic*, and newlines to safe HTML */
+function renderSimpleMarkdown(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    .replace(/\n/g, "<br />");
+}
+
 interface ChatMessageProps {
   message: ChatMessageType;
 }

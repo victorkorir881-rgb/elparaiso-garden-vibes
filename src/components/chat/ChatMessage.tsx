@@ -49,9 +49,8 @@ export default function ChatMessage({ message }: ChatMessageProps) {
                 "text-sm leading-relaxed whitespace-pre-wrap break-words",
                 isUser ? "text-primary-foreground" : "text-foreground"
               )}
-            >
-              {message.content}
-            </div>
+              dangerouslySetInnerHTML={{ __html: renderSimpleMarkdown(message.content) }}
+            />
 
             {/* Assistant actions */}
             {!isUser && message.actions && message.actions.length > 0 && (

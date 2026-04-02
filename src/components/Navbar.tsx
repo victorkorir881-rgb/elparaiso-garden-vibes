@@ -97,6 +97,16 @@ export default function Navbar() {
                 {link.label}
               </a>
             ))}
+            {isAdmin && (
+              <a
+                href="/admin"
+                onClick={() => setOpen(false)}
+                className="flex items-center justify-center gap-2 font-display text-sm tracking-widest uppercase text-amber border border-amber/30 px-5 py-3 rounded-full"
+              >
+                <Shield size={14} />
+                Admin Panel
+              </a>
+            )}
             <a
               href={SITE_CONFIG.contact.phoneTelHref}
               className="flex items-center justify-center gap-2 bg-gradient-fire text-primary-foreground font-display text-sm tracking-widest px-5 py-3 rounded-full mt-2"

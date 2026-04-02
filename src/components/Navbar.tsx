@@ -47,6 +47,15 @@ export default function Navbar() {
                 {link.label}
               </a>
             ))}
+            {isAdmin && (
+              <a
+                href="/admin"
+                className="flex items-center gap-1.5 font-display text-sm tracking-widest uppercase text-amber hover:text-amber/80 transition-colors duration-200"
+              >
+                <Shield size={14} />
+                Admin
+              </a>
+            )}
             <a
               href={SITE_CONFIG.contact.phoneTelHref}
               className="flex items-center gap-2 bg-gradient-fire text-primary-foreground font-display text-sm tracking-widest px-5 py-2.5 rounded-full hover:opacity-90 transition-opacity shadow-amber"

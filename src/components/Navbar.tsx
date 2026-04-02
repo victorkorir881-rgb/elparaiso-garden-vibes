@@ -8,6 +8,7 @@ const MOBILE_MENU_ID = "mobile-nav-menu";
 export default function Navbar() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const { isAdmin } = useAuth();
 
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 60);

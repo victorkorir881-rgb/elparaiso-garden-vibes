@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { Menu, X, Phone } from "lucide-react";
+import { Menu, X, Phone, Shield } from "lucide-react";
 import { SITE_CONFIG } from "@/config/siteConfig";
+import { useAuth } from "@/hooks/useAuth";
 
 const MOBILE_MENU_ID = "mobile-nav-menu";
 

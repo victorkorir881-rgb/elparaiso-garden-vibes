@@ -1,12 +1,14 @@
 import { useState, useEffect } from "react";
-import { Menu, X, Phone } from "lucide-react";
+import { Menu, X, Phone, Shield } from "lucide-react";
 import { SITE_CONFIG } from "@/config/siteConfig";
+import { useAuth } from "@/hooks/useAuth";
 
 const MOBILE_MENU_ID = "mobile-nav-menu";
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const { isAdmin } = useAuth();
 
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 60);
@@ -45,6 +47,15 @@ export default function Navbar() {
                 {link.label}
               </a>
             ))}
+            {isAdmin && (
+              <a
+                href="/admin"
+                className="flex items-center gap-1.5 font-display text-sm tracking-widest uppercase text-amber hover:text-amber/80 transition-colors duration-200"
+              >
+                <Shield size={14} />
+                Admin
+              </a>
+            )}
             <a
               href={SITE_CONFIG.contact.phoneTelHref}
               className="flex items-center gap-2 bg-gradient-fire text-primary-foreground font-display text-sm tracking-widest px-5 py-2.5 rounded-full hover:opacity-90 transition-opacity shadow-amber"
@@ -86,6 +97,16 @@ export default function Navbar() {
                 {link.label}
               </a>
             ))}
+            {isAdmin && (
+              <a
+                href="/admin"
+                onClick={() => setOpen(false)}
+                className="flex items-center justify-center gap-2 font-display text-sm tracking-widest uppercase text-amber border border-amber/30 px-5 py-3 rounded-full"
+              >
+                <Shield size={14} />
+                Admin Panel
+              </a>
+            )}
             <a
               href={SITE_CONFIG.contact.phoneTelHref}
               className="flex items-center justify-center gap-2 bg-gradient-fire text-primary-foreground font-display text-sm tracking-widest px-5 py-3 rounded-full mt-2"

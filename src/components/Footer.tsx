@@ -64,6 +64,12 @@ export default function Footer() {
                   {link.label}
                 </a>
               ))}
+              <a
+                href="/admin/login"
+                className="font-body text-sm text-muted-foreground hover:text-amber transition-colors"
+              >
+                Admin Panel
+              </a>
             </div>
           </div>
 

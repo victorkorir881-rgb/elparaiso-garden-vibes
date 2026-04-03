@@ -28,7 +28,7 @@ export default function AdminLogin() {
           password,
           options: {
             data: { full_name: fullName },
-            emailRedirectTo: window.location.origin + "/admin",
+            emailRedirectTo: "https://elparaisogardens.vercel.app/admin",
           },
         });
         if (error) throw error;

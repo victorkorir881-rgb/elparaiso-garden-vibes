@@ -1,0 +1,23 @@
+CREATE TABLE `payments` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`orderId` int,
+	`reservationId` int,
+	`amount` decimal(10,2) NOT NULL,
+	`currency` varchar(3) NOT NULL DEFAULT 'KES',
+	`paymentMethod` enum('mpesa','card','bank_transfer') NOT NULL,
+	`flutterwaveRef` varchar(128),
+	`flutterwaveId` varchar(128),
+	`status` enum('pending','processing','completed','failed','cancelled') NOT NULL DEFAULT 'pending',
+	`customerName` varchar(255) NOT NULL,
+	`customerEmail` varchar(320) NOT NULL,
+	`customerPhone` varchar(20) NOT NULL,
+	`description` text,
+	`metadata` json,
+	`failureReason` text,
+	`completedAt` timestamp,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `payments_id` PRIMARY KEY(`id`),
+	CONSTRAINT `payments_flutterwaveRef_unique` UNIQUE(`flutterwaveRef`),
+	CONSTRAINT `payments_flutterwaveId_unique` UNIQUE(`flutterwaveId`)
+);

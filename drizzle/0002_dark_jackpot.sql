@@ -1,0 +1,22 @@
+CREATE TABLE `orders` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`orderNumber` varchar(32) NOT NULL,
+	`customerName` varchar(255) NOT NULL,
+	`customerPhone` varchar(32) NOT NULL,
+	`customerEmail` varchar(320),
+	`items` json NOT NULL,
+	`totalAmount` decimal(10,2) NOT NULL,
+	`orderType` enum('dine-in','takeaway','delivery') NOT NULL,
+	`deliveryAddress` text,
+	`specialInstructions` text,
+	`status` enum('pending','confirmed','preparing','ready','out-for-delivery','completed','cancelled') NOT NULL DEFAULT 'pending',
+	`estimatedTime` int,
+	`actualDeliveryTime` timestamp,
+	`paymentMethod` varchar(64),
+	`paymentStatus` enum('pending','paid','failed') NOT NULL DEFAULT 'pending',
+	`adminNotes` text,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `orders_id` PRIMARY KEY(`id`),
+	CONSTRAINT `orders_orderNumber_unique` UNIQUE(`orderNumber`)
+);

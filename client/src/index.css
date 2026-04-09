@@ -1,0 +1,180 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap');
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-display: 'Playfair Display', serif;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+:root {
+  /* Elparaiso Garden — Dark Premium Theme */
+  --radius: 0.625rem;
+  /* Brand palette */
+  --brand-gold: oklch(72% 0.14 65);
+  --brand-amber: oklch(68% 0.16 60);
+  --brand-gold-muted: oklch(60% 0.10 65);
+  --brand-ivory: oklch(94% 0.01 80);
+  /* Semantic tokens */
+  --background: oklch(12% 0.01 60);
+  --foreground: oklch(92% 0.01 80);
+  --card: oklch(16% 0.015 55);
+  --card-foreground: oklch(92% 0.01 80);
+  --popover: oklch(18% 0.015 55);
+  --popover-foreground: oklch(92% 0.01 80);
+  --primary: oklch(72% 0.14 65);
+  --primary-foreground: oklch(12% 0.01 60);
+  --secondary: oklch(22% 0.025 55);
+  --secondary-foreground: oklch(88% 0.01 80);
+  --muted: oklch(22% 0.015 55);
+  --muted-foreground: oklch(60% 0.02 60);
+  --accent: oklch(28% 0.04 55);
+  --accent-foreground: oklch(88% 0.01 80);
+  --destructive: oklch(55% 0.22 25);
+  --destructive-foreground: oklch(98% 0.005 0);
+  --border: oklch(25% 0.02 55);
+  --input: oklch(20% 0.015 55);
+  --ring: oklch(72% 0.14 65);
+  --chart-1: oklch(72% 0.14 65);
+  --chart-2: oklch(60% 0.12 155);
+  --chart-3: oklch(65% 0.15 30);
+  --chart-4: oklch(70% 0.12 200);
+  --chart-5: oklch(68% 0.16 60);
+  --sidebar: oklch(10% 0.008 60);
+  --sidebar-foreground: oklch(88% 0.01 80);
+  --sidebar-primary: oklch(72% 0.14 65);
+  --sidebar-primary-foreground: oklch(12% 0.01 60);
+  --sidebar-accent: oklch(18% 0.015 55);
+  --sidebar-accent-foreground: oklch(88% 0.01 80);
+  --sidebar-border: oklch(22% 0.015 55);
+  --sidebar-ring: oklch(72% 0.14 65);
+}
+
+/* Dark is the only theme for Elparaiso — no .dark override needed */
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html { scroll-behavior: smooth; }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', sans-serif;
+  }
+  h1, h2, h3 { font-family: 'Playfair Display', serif; }
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [type="button"]:not(:disabled),
+  [type="submit"]:not(:disabled),
+  [type="reset"]:not(:disabled),
+  a[href],
+  select:not(:disabled),
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled) {
+    @apply cursor-pointer;
+  }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: oklch(10% 0.008 60); }
+  ::-webkit-scrollbar-thumb { background: oklch(28% 0.04 50); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: oklch(60% 0.10 65); }
+}
+
+@layer components {
+  .text-gold { color: oklch(72% 0.14 65); }
+  .bg-gold { background-color: oklch(72% 0.14 65); }
+  .border-gold { border-color: oklch(72% 0.14 65); }
+  .text-ivory { color: oklch(94% 0.01 80); }
+  .section-padding { @apply py-16 md:py-24; }
+  .section-title { font-family: 'Playfair Display', serif; @apply text-3xl md:text-4xl lg:text-5xl font-bold; }
+  .gold-divider {
+    width: 4rem; height: 3px; border-radius: 9999px;
+    background: linear-gradient(90deg, oklch(72% 0.14 65), oklch(68% 0.16 60));
+  }
+  .card-hover { @apply transition-all duration-300 hover:shadow-xl hover:-translate-y-1; }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in-up { animation: fadeInUp 0.6s ease-out forwards; }
+
+@layer components {
+  /**
+   * Custom container utility that centers content and adds responsive padding.
+   *
+   * This overrides Tailwind's default container behavior to:
+   * - Auto-center content (mx-auto)
+   * - Add responsive horizontal padding
+   * - Set max-width for large screens
+   *
+   * Usage: <div className="container">...</div>
+   *
+   * For custom widths, use max-w-* utilities directly:
+   * <div className="max-w-6xl mx-auto px-4">...</div>
+   */
+  .container {
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 1rem; /* 16px - mobile padding */
+    padding-right: 1rem;
+  }
+
+  .flex {
+    min-height: 0;
+    min-width: 0;
+  }
+
+  @media (min-width: 640px) {
+    .container {
+      padding-left: 1.5rem; /* 24px - tablet padding */
+      padding-right: 1.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .container {
+      padding-left: 2rem; /* 32px - desktop padding */
+      padding-right: 2rem;
+      max-width: 1280px; /* Standard content width */
+    }
+  }
+}

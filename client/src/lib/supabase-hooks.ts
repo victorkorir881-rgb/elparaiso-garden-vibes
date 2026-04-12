@@ -595,7 +595,7 @@ export function useUpdateUserRole() {
       // Delete existing role and insert new one
       await supabase.from("admin_roles").delete().eq("user_id", userId);
       if (role !== "user") {
-        const { error } = await supabase.from("admin_roles").insert({ user_id: userId, role });
+        const { error } = await supabase.from("admin_roles").insert({ user_id: userId, role: role as any });
         if (error) throw error;
       }
     },

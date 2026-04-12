@@ -7,9 +7,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { trpc } from "@/lib/trpc";
-import { useAuth } from "@/_core/hooks/useAuth";
-import { getLoginUrl } from "@/const";
+import { useAuth } from "@/lib/auth";
+import { useUnreadMessageCount } from "@/lib/supabase-hooks";
 import { toast } from "sonner";
 
 const navItems = [
@@ -30,16 +29,9 @@ const navItems = [
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [location, navigate] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { user, loading, isAuthenticated } = useAuth();
+  const { user, loading, isAuthenticated, signOut } = useAuth();
 
-  const { data: unreadCount } = trpc.contact.unreadCount.useQuery(undefined, {
-    enabled: isAuthenticated && ["admin", "manager", "editor"].includes(user?.role ?? ""),
-    refetchInterval: 30000,
-  });
-
-  const logoutMutation = trpc.auth.logout.useMutation({
-    onSuccess: () => { navigate("/admin/login"); toast.success("Logged out"); },
-  });
+  const { data: unreadCount } = useUnreadMessageCount();
 
   // Auth guard
   if (loading) {
@@ -55,7 +47,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return null;
   }
 
-  if (!["admin", "manager", "editor"].includes(user?.role ?? "")) {
+  if (!["super_admin", "admin", "manager", "staff"].includes(user?.role ?? "")) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
         <div className="text-foreground font-semibold text-lg">Access Denied</div>
@@ -68,9 +60,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const isActive = (href: string, exact = false) =>
     exact ? location === href : location.startsWith(href);
 
+  const handleLogout = async () => {
+    await signOut();
+    navigate("/admin/login");
+    toast.success("Logged out");
+  };
+
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
-      {/* Logo */}
       <div className="p-5 border-b border-border">
         <Link href="/" className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm">E</div>
@@ -81,7 +78,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </Link>
       </div>
 
-      {/* Nav */}
       <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
         {navItems.map((item) => {
           const active = isActive(item.href, item.exact);
@@ -110,7 +106,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         })}
       </nav>
 
-      {/* User */}
       <div className="p-3 border-t border-border">
         <div className="flex items-center gap-3 px-3 py-2 mb-2">
           <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary text-sm font-semibold">
@@ -131,8 +126,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             variant="ghost"
             size="sm"
             className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-            onClick={() => logoutMutation.mutate()}
-            disabled={logoutMutation.isPending}
+            onClick={handleLogout}
           >
             <LogOut className="w-4 h-4" />
           </Button>
@@ -143,12 +137,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="min-h-screen bg-background flex">
-      {/* Desktop Sidebar */}
       <aside className="hidden lg:flex w-60 flex-col border-r border-border bg-card shrink-0">
         <SidebarContent />
       </aside>
 
-      {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/60" onClick={() => setSidebarOpen(false)} />
@@ -164,9 +156,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       )}
 
-      {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Bar */}
         <header className="h-14 border-b border-border bg-card flex items-center justify-between px-4 shrink-0">
           <Button variant="ghost" size="icon" className="lg:hidden text-foreground" onClick={() => setSidebarOpen(true)}>
             <Menu className="w-5 h-5" />
@@ -183,7 +173,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         </header>
 
-        {/* Page Content */}
         <main className="flex-1 overflow-auto p-4 md:p-6">
           {children}
         </main>

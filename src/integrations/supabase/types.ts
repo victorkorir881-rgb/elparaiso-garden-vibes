@@ -202,6 +202,45 @@ export type Database = {
           },
         ]
       }
+      contact_messages: {
+        Row: {
+          admin_notes: string | null
+          created_at: string
+          email: string | null
+          id: string
+          inquiry_type: string
+          is_read: boolean
+          message: string
+          name: string
+          phone: string
+          updated_at: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          inquiry_type?: string
+          is_read?: boolean
+          message: string
+          name: string
+          phone: string
+          updated_at?: string
+        }
+        Update: {
+          admin_notes?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          inquiry_type?: string
+          is_read?: boolean
+          message?: string
+          name?: string
+          phone?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       events: {
         Row: {
           created_at: string
@@ -240,6 +279,39 @@ export type Database = {
           is_featured?: boolean
           start_time?: string | null
           title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      gallery_images: {
+        Row: {
+          alt_text: string | null
+          category: string
+          created_at: string
+          id: string
+          image_url: string
+          is_featured: boolean
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          alt_text?: string | null
+          category?: string
+          created_at?: string
+          id?: string
+          image_url: string
+          is_featured?: boolean
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          alt_text?: string | null
+          category?: string
+          created_at?: string
+          id?: string
+          image_url?: string
+          is_featured?: boolean
+          sort_order?: number
           updated_at?: string
         }
         Relationships: []
@@ -324,6 +396,66 @@ export type Database = {
           },
         ]
       }
+      orders: {
+        Row: {
+          admin_notes: string | null
+          created_at: string
+          customer_email: string | null
+          customer_name: string
+          customer_phone: string
+          delivery_address: string | null
+          estimated_time: number | null
+          id: string
+          items: Json
+          order_number: string
+          order_type: string
+          payment_method: string | null
+          payment_status: string
+          special_instructions: string | null
+          status: string
+          total_amount: number
+          updated_at: string
+        }
+        Insert: {
+          admin_notes?: string | null
+          created_at?: string
+          customer_email?: string | null
+          customer_name: string
+          customer_phone: string
+          delivery_address?: string | null
+          estimated_time?: number | null
+          id?: string
+          items?: Json
+          order_number: string
+          order_type?: string
+          payment_method?: string | null
+          payment_status?: string
+          special_instructions?: string | null
+          status?: string
+          total_amount?: number
+          updated_at?: string
+        }
+        Update: {
+          admin_notes?: string | null
+          created_at?: string
+          customer_email?: string | null
+          customer_name?: string
+          customer_phone?: string
+          delivery_address?: string | null
+          estimated_time?: number | null
+          id?: string
+          items?: Json
+          order_number?: string
+          order_type?: string
+          payment_method?: string | null
+          payment_status?: string
+          special_instructions?: string | null
+          status?: string
+          total_amount?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       reservation_leads: {
         Row: {
           created_at: string
@@ -401,6 +533,45 @@ export type Database = {
           is_featured?: boolean
           rating?: number
           source?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      seo_settings: {
+        Row: {
+          canonical_url: string | null
+          created_at: string
+          id: string
+          meta_description: string | null
+          og_description: string | null
+          og_image: string | null
+          og_title: string | null
+          page: string
+          seo_title: string | null
+          updated_at: string
+        }
+        Insert: {
+          canonical_url?: string | null
+          created_at?: string
+          id?: string
+          meta_description?: string | null
+          og_description?: string | null
+          og_image?: string | null
+          og_title?: string | null
+          page: string
+          seo_title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          canonical_url?: string | null
+          created_at?: string
+          id?: string
+          meta_description?: string | null
+          og_description?: string | null
+          og_image?: string | null
+          og_title?: string | null
+          page?: string
+          seo_title?: string | null
           updated_at?: string
         }
         Relationships: []

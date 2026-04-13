@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { trpc } from "@/lib/trpc";
+import { useSeoByPage, useUpsertSeo } from "@/lib/supabase-hooks";
 
 const PAGES = [
   { value: "home", label: "Home Page" },
@@ -25,25 +25,32 @@ export default function AdminSEO() {
   const [page, setPage] = useState("home");
   const [form, setForm] = useState<SeoForm>(defaultForm());
 
-  const { data: seoData } = trpc.seo.getByPage.useQuery({ page });
-  const update = trpc.seo.update.useMutation({ onSuccess: () => toast.success("SEO settings saved") });
+  const { data: seoData } = useSeoByPage(page);
+  const update = useUpsertSeo();
 
   useEffect(() => {
     if (seoData) {
       setForm({
-        title: seoData.seoTitle ?? "",
-        description: seoData.metaDescription ?? "",
+        title: seoData.seo_title ?? "",
+        description: seoData.meta_description ?? "",
         keywords: "",
-        ogTitle: seoData.ogTitle ?? "",
-        ogDescription: seoData.ogDescription ?? "",
-        ogImage: seoData.ogImage ?? "",
+        ogTitle: seoData.og_title ?? "",
+        ogDescription: seoData.og_description ?? "",
+        ogImage: seoData.og_image ?? "",
       });
     } else {
       setForm(defaultForm());
     }
   }, [seoData, page]);
 
-  const save = () => update.mutate({ page, ...form });
+  const save = () => update.mutate({
+    page,
+    seo_title: form.title || undefined,
+    meta_description: form.description || undefined,
+    og_title: form.ogTitle || undefined,
+    og_description: form.ogDescription || undefined,
+    og_image: form.ogImage || undefined,
+  }, { onSuccess: () => toast.success("SEO settings saved") });
 
   const titleLen = form.title.length;
   const descLen = form.description.length;
@@ -60,13 +67,10 @@ export default function AdminSEO() {
         </Button>
       </div>
 
-      {/* Page Selector */}
       <div className="bg-card border border-border rounded-xl p-4">
         <Label className="text-foreground mb-2 block">Select Page</Label>
         <Select value={page} onValueChange={setPage}>
-          <SelectTrigger className="bg-input border-border text-foreground w-64">
-            <SelectValue />
-          </SelectTrigger>
+          <SelectTrigger className="bg-input border-border text-foreground w-64"><SelectValue /></SelectTrigger>
           <SelectContent className="bg-popover border-border">
             {PAGES.map((p) => <SelectItem key={p.value} value={p.value} className="text-foreground">{p.label}</SelectItem>)}
           </SelectContent>
@@ -74,7 +78,6 @@ export default function AdminSEO() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Meta Tags */}
         <div className="bg-card border border-border rounded-xl p-5 space-y-4">
           <h2 className="font-semibold text-foreground flex items-center gap-2">
             <Globe className="w-4 h-4 text-primary" /> Meta Tags
@@ -99,7 +102,6 @@ export default function AdminSEO() {
           </div>
         </div>
 
-        {/* Open Graph */}
         <div className="bg-card border border-border rounded-xl p-5 space-y-4">
           <h2 className="font-semibold text-foreground">Open Graph (Social Preview)</h2>
           <div>
@@ -118,7 +120,6 @@ export default function AdminSEO() {
         </div>
       </div>
 
-      {/* Preview */}
       <div className="bg-card border border-border rounded-xl p-5">
         <h2 className="font-semibold text-foreground mb-4">Search Preview</h2>
         <div className="bg-background border border-border rounded-xl p-4 max-w-lg">

@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { toast } from "sonner";
-import { trpc } from "@/lib/trpc";
+import { useSettings, useCreateReservation } from "@/lib/supabase-hooks";
 import PublicLayout from "@/components/public/PublicLayout";
 
 const schema = z.object({
@@ -32,25 +32,26 @@ const TIME_SLOTS = [
 export default function ReservationsPage() {
   const [submitted, setSubmitted] = useState(false);
   const [submittedData, setSubmittedData] = useState<FormData | null>(null);
-  const { data: settings } = trpc.settings.get.useQuery();
+  const { data: settings } = useSettings();
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { name: "", phone: "", email: "", date: "", time: "", guests: 2, specialRequest: "" },
   });
 
-  const createMutation = trpc.reservations.create.useMutation({
-    onSuccess: () => {
-      setSubmitted(true);
-      setSubmittedData(form.getValues());
-    },
-    onError: (err) => toast.error(err.message ?? "Failed to submit reservation"),
-  });
+  const createMutation = useCreateReservation();
 
-  const onSubmit = (data: FormData) => createMutation.mutate(data);
+  const onSubmit = (data: FormData) => {
+    createMutation.mutate(
+      { name: data.name, phone: data.phone, email: data.email || undefined, date: data.date, time: data.time, party_size: data.guests, notes: data.specialRequest || undefined, source: "website" },
+      {
+        onSuccess: () => { setSubmitted(true); setSubmittedData(data); },
+        onError: (err) => toast.error(err.message ?? "Failed to submit reservation"),
+      }
+    );
+  };
 
   const whatsapp = settings?.whatsapp ?? "254791224513";
-
   const today = new Date().toISOString().split("T")[0];
 
   return (
@@ -97,11 +98,7 @@ export default function ReservationsPage() {
                 </div>
               </div>
               <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                <a
-                  href={`https://wa.me/${whatsapp}?text=Hi%20Elparaiso%20Garden!%20I%20just%20made%20a%20reservation%20for%20${submittedData.guests}%20guests%20on%20${submittedData.date}%20at%20${submittedData.time}.%20My%20name%20is%20${encodeURIComponent(submittedData.name)}.`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
+                <a href={`https://wa.me/${whatsapp}?text=Hi%20Elparaiso%20Garden!%20I%20just%20made%20a%20reservation%20for%20${submittedData.guests}%20guests%20on%20${submittedData.date}%20at%20${submittedData.time}.%20My%20name%20is%20${encodeURIComponent(submittedData.name)}.`} target="_blank" rel="noopener noreferrer">
                   <Button className="bg-green-600 hover:bg-green-500 text-white">Confirm via WhatsApp</Button>
                 </a>
                 <Button variant="outline" className="border-border text-foreground hover:bg-accent" onClick={() => { setSubmitted(false); form.reset(); }}>
@@ -118,18 +115,14 @@ export default function ReservationsPage() {
                     <FormField control={form.control} name="name" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-foreground">Full Name *</FormLabel>
-                        <FormControl>
-                          <Input {...field} placeholder="Your name" className="bg-input border-border text-foreground placeholder:text-muted-foreground" />
-                        </FormControl>
+                        <FormControl><Input {...field} placeholder="Your name" className="bg-input border-border text-foreground placeholder:text-muted-foreground" /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )} />
                     <FormField control={form.control} name="phone" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-foreground">Phone Number *</FormLabel>
-                        <FormControl>
-                          <Input {...field} placeholder="07XX XXX XXX" className="bg-input border-border text-foreground placeholder:text-muted-foreground" />
-                        </FormControl>
+                        <FormControl><Input {...field} placeholder="07XX XXX XXX" className="bg-input border-border text-foreground placeholder:text-muted-foreground" /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )} />
@@ -137,9 +130,7 @@ export default function ReservationsPage() {
                   <FormField control={form.control} name="email" render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-foreground">Email (optional)</FormLabel>
-                      <FormControl>
-                        <Input {...field} type="email" placeholder="your@email.com" className="bg-input border-border text-foreground placeholder:text-muted-foreground" />
-                      </FormControl>
+                      <FormControl><Input {...field} type="email" placeholder="your@email.com" className="bg-input border-border text-foreground placeholder:text-muted-foreground" /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )} />
@@ -147,9 +138,7 @@ export default function ReservationsPage() {
                     <FormField control={form.control} name="date" render={({ field }) => (
                       <FormItem className="sm:col-span-1">
                         <FormLabel className="text-foreground">Date *</FormLabel>
-                        <FormControl>
-                          <Input {...field} type="date" min={today} className="bg-input border-border text-foreground" />
-                        </FormControl>
+                        <FormControl><Input {...field} type="date" min={today} className="bg-input border-border text-foreground" /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )} />
@@ -159,9 +148,7 @@ export default function ReservationsPage() {
                         <FormControl>
                           <select {...field} className="w-full h-10 px-3 rounded-md bg-input border border-border text-foreground text-sm">
                             <option value="">Select time</option>
-                            {TIME_SLOTS.map((t) => (
-                              <option key={t} value={t}>{t}</option>
-                            ))}
+                            {TIME_SLOTS.map((t) => (<option key={t} value={t}>{t}</option>))}
                           </select>
                         </FormControl>
                         <FormMessage />
@@ -170,9 +157,7 @@ export default function ReservationsPage() {
                     <FormField control={form.control} name="guests" render={({ field }) => (
                       <FormItem>
                         <FormLabel className="text-foreground">Guests *</FormLabel>
-                        <FormControl>
-                          <Input {...field} type="number" min={1} max={100} className="bg-input border-border text-foreground" />
-                        </FormControl>
+                        <FormControl><Input {...field} type="number" min={1} max={100} className="bg-input border-border text-foreground" /></FormControl>
                         <FormMessage />
                       </FormItem>
                     )} />
@@ -180,9 +165,7 @@ export default function ReservationsPage() {
                   <FormField control={form.control} name="specialRequest" render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-foreground">Special Requests (optional)</FormLabel>
-                      <FormControl>
-                        <Textarea {...field} placeholder="Any dietary requirements, special occasions, seating preferences..." rows={3} className="bg-input border-border text-foreground placeholder:text-muted-foreground resize-none" />
-                      </FormControl>
+                      <FormControl><Textarea {...field} placeholder="Any dietary requirements, special occasions, seating preferences..." rows={3} className="bg-input border-border text-foreground placeholder:text-muted-foreground resize-none" /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )} />

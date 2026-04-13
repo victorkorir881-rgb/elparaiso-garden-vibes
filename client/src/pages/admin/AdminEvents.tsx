@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { Plus, Pencil, Trash2, Calendar, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,55 +8,46 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { trpc } from "@/lib/trpc";
+import { useEvents, useCreateEvent, useUpdateEvent, useDeleteEvent } from "@/lib/supabase-hooks";
 
 type EventForm = {
-  id?: number; title: string; subtitle: string; description: string; eventDate: string;
-  startTime: string; endTime: string; ctaLabel: string; ctaUrl: string;
-  isActive: boolean; showOnHomepage: boolean; imageBase64?: string; imageMime?: string; imagePreview?: string;
+  id?: string; title: string; description: string; eventDate: string;
+  startTime: string; endTime: string;
+  isActive: boolean; isFeatured: boolean; imageUrl?: string;
 };
 
 const defaultForm = (): EventForm => ({
-  title: "", subtitle: "", description: "", eventDate: "", startTime: "", endTime: "",
-  ctaLabel: "", ctaUrl: "", isActive: true, showOnHomepage: false,
+  title: "", description: "", eventDate: "", startTime: "", endTime: "",
+  isActive: true, isFeatured: false,
 });
 
 export default function AdminEvents() {
   const [dialog, setDialog] = useState(false);
   const [form, setForm] = useState<EventForm>(defaultForm());
-  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
-  const utils = trpc.useUtils();
-  const { data: events, isLoading } = trpc.events.list.useQuery({ activeOnly: false });
-
-  const createEvent = trpc.events.create.useMutation({ onSuccess: () => { utils.events.list.invalidate(); setDialog(false); toast.success("Event created"); } });
-  const updateEvent = trpc.events.update.useMutation({ onSuccess: () => { utils.events.list.invalidate(); setDialog(false); toast.success("Event updated"); } });
-  const deleteEvent = trpc.events.delete.useMutation({ onSuccess: () => { utils.events.list.invalidate(); setDeleteConfirm(null); toast.success("Event deleted"); } });
-
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => setForm((p) => ({ ...p, imageBase64: ev.target?.result as string, imageMime: file.type, imagePreview: ev.target?.result as string }));
-    reader.readAsDataURL(file);
-  };
+  const { data: events, isLoading } = useEvents({});
+  const createEvent = useCreateEvent();
+  const updateEvent = useUpdateEvent();
+  const deleteEvent = useDeleteEvent();
 
   const save = () => {
     if (!form.title) return toast.error("Title is required");
+    if (!form.eventDate) return toast.error("Date is required");
     const payload = {
-      title: form.title, subtitle: form.subtitle || undefined, description: form.description || undefined,
-      eventDate: form.eventDate || undefined, startTime: form.startTime || undefined, endTime: form.endTime || undefined,
-      ctaLabel: form.ctaLabel || undefined, ctaUrl: form.ctaUrl || undefined,
-      isActive: form.isActive, showOnHomepage: form.showOnHomepage,
-      imageBase64: form.imageBase64, imageMime: form.imageMime,
+      title: form.title, description: form.description || undefined,
+      event_date: form.eventDate, start_time: form.startTime || undefined, end_time: form.endTime || undefined,
+      is_active: form.isActive, is_featured: form.isFeatured, image_url: form.imageUrl,
     };
-    if (form.id) updateEvent.mutate({ id: form.id, ...payload });
-    else createEvent.mutate(payload);
+    if (form.id) {
+      updateEvent.mutate({ id: form.id, ...payload }, { onSuccess: () => { setDialog(false); toast.success("Event updated"); } });
+    } else {
+      createEvent.mutate(payload, { onSuccess: () => { setDialog(false); toast.success("Event created"); } });
+    }
   };
 
   const openEdit = (evt: any) => {
-    setForm({ id: evt.id, title: evt.title, subtitle: evt.subtitle ?? "", description: evt.description ?? "", eventDate: evt.eventDate ?? "", startTime: evt.startTime ?? "", endTime: evt.endTime ?? "", ctaLabel: evt.ctaLabel ?? "", ctaUrl: evt.ctaUrl ?? "", isActive: evt.isActive, showOnHomepage: evt.showOnHomepage, imagePreview: evt.imageUrl });
+    setForm({ id: evt.id, title: evt.title, description: evt.description ?? "", eventDate: evt.event_date ?? "", startTime: evt.start_time ?? "", endTime: evt.end_time ?? "", isActive: evt.is_active, isFeatured: evt.is_featured, imageUrl: evt.image_url });
     setDialog(true);
   };
 
@@ -80,24 +71,23 @@ export default function AdminEvents() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {events.map((evt) => (
             <div key={evt.id} className="bg-card border border-border rounded-xl overflow-hidden">
-              {evt.imageUrl && (
+              {evt.image_url && (
                 <div className="h-36 overflow-hidden">
-                  <img src={evt.imageUrl} alt={evt.title} className="w-full h-full object-cover" />
+                  <img src={evt.image_url} alt={evt.title} className="w-full h-full object-cover" />
                 </div>
               )}
               <div className="p-4">
                 <div className="flex items-start justify-between gap-2 mb-2">
                   <h3 className="font-semibold text-foreground text-sm">{evt.title}</h3>
                   <div className="flex gap-1 shrink-0">
-                    {evt.isActive ? <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">Active</Badge> : <Badge variant="outline" className="text-xs text-muted-foreground">Inactive</Badge>}
-                    {evt.showOnHomepage && <Badge className="bg-primary/20 text-primary border-primary/30 text-xs">Homepage</Badge>}
+                    {evt.is_active ? <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-xs">Active</Badge> : <Badge variant="outline" className="text-xs text-muted-foreground">Inactive</Badge>}
+                    {evt.is_featured && <Badge className="bg-primary/20 text-primary border-primary/30 text-xs">Featured</Badge>}
                   </div>
                 </div>
-                {evt.subtitle && <p className="text-primary text-xs mb-1">{evt.subtitle}</p>}
-                {(evt.eventDate || evt.startTime) && (
+                {(evt.event_date || evt.start_time) && (
                   <div className="flex gap-3 text-xs text-muted-foreground mb-3">
-                    {evt.eventDate && <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{evt.eventDate}</span>}
-                    {evt.startTime && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{evt.startTime}</span>}
+                    {evt.event_date && <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{evt.event_date}</span>}
+                    {evt.start_time && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{evt.start_time}</span>}
                   </div>
                 )}
                 <div className="flex gap-2 mt-3">
@@ -118,7 +108,6 @@ export default function AdminEvents() {
         </div>
       )}
 
-      {/* Dialog */}
       <Dialog open={dialog} onOpenChange={setDialog}>
         <DialogContent className="bg-card border-border text-foreground max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{form.id ? "Edit Event" : "Create Event"}</DialogTitle></DialogHeader>
@@ -128,16 +117,12 @@ export default function AdminEvents() {
               <Input value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} className="bg-input border-border text-foreground mt-1" placeholder="Event title" />
             </div>
             <div>
-              <Label className="text-foreground">Subtitle / Tagline</Label>
-              <Input value={form.subtitle} onChange={(e) => setForm((p) => ({ ...p, subtitle: e.target.value }))} className="bg-input border-border text-foreground mt-1" placeholder="e.g. Every Friday Night" />
-            </div>
-            <div>
               <Label className="text-foreground">Description</Label>
               <Textarea value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} className="bg-input border-border text-foreground mt-1 resize-none" rows={3} />
             </div>
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <Label className="text-foreground">Date</Label>
+                <Label className="text-foreground">Date *</Label>
                 <Input type="date" value={form.eventDate} onChange={(e) => setForm((p) => ({ ...p, eventDate: e.target.value }))} className="bg-input border-border text-foreground mt-1" />
               </div>
               <div>
@@ -149,25 +134,9 @@ export default function AdminEvents() {
                 <Input type="time" value={form.endTime} onChange={(e) => setForm((p) => ({ ...p, endTime: e.target.value }))} className="bg-input border-border text-foreground mt-1" />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-foreground">CTA Label</Label>
-                <Input value={form.ctaLabel} onChange={(e) => setForm((p) => ({ ...p, ctaLabel: e.target.value }))} className="bg-input border-border text-foreground mt-1" placeholder="e.g. Book Now" />
-              </div>
-              <div>
-                <Label className="text-foreground">CTA URL</Label>
-                <Input value={form.ctaUrl} onChange={(e) => setForm((p) => ({ ...p, ctaUrl: e.target.value }))} className="bg-input border-border text-foreground mt-1" placeholder="https://..." />
-              </div>
-            </div>
             <div>
-              <Label className="text-foreground">Image</Label>
-              <div className="mt-1 flex items-center gap-3">
-                {form.imagePreview && <img src={form.imagePreview} alt="preview" className="w-16 h-16 rounded-lg object-cover" />}
-                <Button type="button" variant="outline" size="sm" className="border-border text-foreground hover:bg-accent" onClick={() => fileRef.current?.click()}>
-                  {form.imagePreview ? "Change Image" : "Upload Image"}
-                </Button>
-                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
-              </div>
+              <Label className="text-foreground">Image URL</Label>
+              <Input value={form.imageUrl ?? ""} onChange={(e) => setForm((p) => ({ ...p, imageUrl: e.target.value }))} className="bg-input border-border text-foreground mt-1" placeholder="https://..." />
             </div>
             <div className="flex gap-6">
               <div className="flex items-center gap-2">
@@ -175,8 +144,8 @@ export default function AdminEvents() {
                 <Label className="text-foreground">Active</Label>
               </div>
               <div className="flex items-center gap-2">
-                <Switch checked={form.showOnHomepage} onCheckedChange={(v) => setForm((p) => ({ ...p, showOnHomepage: v }))} />
-                <Label className="text-foreground">Show on Homepage</Label>
+                <Switch checked={form.isFeatured} onCheckedChange={(v) => setForm((p) => ({ ...p, isFeatured: v }))} />
+                <Label className="text-foreground">Featured</Label>
               </div>
             </div>
           </div>
@@ -189,14 +158,13 @@ export default function AdminEvents() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirm */}
       <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
         <DialogContent className="bg-card border-border text-foreground max-w-sm">
           <DialogHeader><DialogTitle>Delete Event</DialogTitle></DialogHeader>
           <p className="text-muted-foreground text-sm">Are you sure you want to delete this event?</p>
           <DialogFooter>
             <Button variant="outline" className="border-border text-foreground hover:bg-accent" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={() => deleteConfirm && deleteEvent.mutate({ id: deleteConfirm })}>Delete</Button>
+            <Button variant="destructive" onClick={() => deleteConfirm && deleteEvent.mutate(deleteConfirm, { onSuccess: () => { setDeleteConfirm(null); toast.success("Event deleted"); } })}>Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

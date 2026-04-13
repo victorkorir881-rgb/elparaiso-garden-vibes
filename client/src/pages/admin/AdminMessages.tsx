@@ -1,34 +1,32 @@
 import { useState } from "react";
-import { Mail, MailOpen, Trash2, Phone, Search, Filter } from "lucide-react";
+import { Mail, MailOpen, Trash2, Phone, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { trpc } from "@/lib/trpc";
+import { useContactMessages, useUpdateContactMessage, useDeleteContactMessage } from "@/lib/supabase-hooks";
 
 export default function AdminMessages() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [selected, setSelected] = useState<any | null>(null);
-  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
-  const utils = trpc.useUtils();
-  const { data: messages, isLoading } = trpc.contact.list.useQuery({
+  const { data: messages, isLoading } = useContactMessages({
     isRead: filter === "unread" ? false : undefined,
   });
 
-  const markRead = trpc.contact.markRead.useMutation({ onSuccess: () => utils.contact.list.invalidate() });
-  // markUnread uses same markRead mutation with isRead:false
-  const del = trpc.contact.delete.useMutation({ onSuccess: () => { utils.contact.list.invalidate(); setDeleteConfirm(null); toast.success("Message deleted"); } });
+  const markRead = useUpdateContactMessage();
+  const del = useDeleteContactMessage();
 
   const openMessage = (msg: any) => {
     setSelected(msg);
-    if (!msg.isRead) markRead.mutate({ id: msg.id, isRead: true });
+    if (!msg.is_read) markRead.mutate({ id: msg.id, is_read: true });
   };
 
-  const unreadCount = messages?.filter((m) => !m.isRead).length ?? 0;
+  const unreadCount = messages?.filter((m) => !m.is_read).length ?? 0;
 
   return (
     <div className="space-y-6">
@@ -47,9 +45,7 @@ export default function AdminMessages() {
           <Input placeholder="Search messages..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10 bg-card border-border text-foreground placeholder:text-muted-foreground" />
         </div>
         <Select value={filter} onValueChange={setFilter}>
-          <SelectTrigger className="w-36 bg-card border-border text-foreground">
-            <SelectValue />
-          </SelectTrigger>
+          <SelectTrigger className="w-36 bg-card border-border text-foreground"><SelectValue /></SelectTrigger>
           <SelectContent className="bg-popover border-border">
             <SelectItem value="all" className="text-foreground">All Messages</SelectItem>
             <SelectItem value="unread" className="text-foreground">Unread Only</SelectItem>
@@ -65,20 +61,20 @@ export default function AdminMessages() {
             {messages.map((msg) => (
               <div
                 key={msg.id}
-                className={`flex items-start gap-4 px-4 py-4 cursor-pointer hover:bg-accent/20 transition-colors ${!msg.isRead ? "bg-primary/5" : ""}`}
+                className={`flex items-start gap-4 px-4 py-4 cursor-pointer hover:bg-accent/20 transition-colors ${!msg.is_read ? "bg-primary/5" : ""}`}
                 onClick={() => openMessage(msg)}
               >
-                <div className={`mt-1 shrink-0 ${!msg.isRead ? "text-primary" : "text-muted-foreground"}`}>
-                  {msg.isRead ? <MailOpen className="w-4 h-4" /> : <Mail className="w-4 h-4" />}
+                <div className={`mt-1 shrink-0 ${!msg.is_read ? "text-primary" : "text-muted-foreground"}`}>
+                  {msg.is_read ? <MailOpen className="w-4 h-4" /> : <Mail className="w-4 h-4" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <span className={`font-medium text-sm ${!msg.isRead ? "text-foreground" : "text-muted-foreground"}`}>{msg.name}</span>
-                      {!msg.isRead && <Badge className="bg-primary/20 text-primary border-primary/30 text-xs px-1.5 py-0">New</Badge>}
-                      {msg.inquiryType && <span className="text-xs text-muted-foreground hidden sm:inline">· {msg.inquiryType}</span>}
+                      <span className={`font-medium text-sm ${!msg.is_read ? "text-foreground" : "text-muted-foreground"}`}>{msg.name}</span>
+                      {!msg.is_read && <Badge className="bg-primary/20 text-primary border-primary/30 text-xs px-1.5 py-0">New</Badge>}
+                      {msg.inquiry_type && <span className="text-xs text-muted-foreground hidden sm:inline">· {msg.inquiry_type}</span>}
                     </div>
-                    <span className="text-xs text-muted-foreground shrink-0">{new Date(msg.createdAt).toLocaleDateString()}</span>
+                    <span className="text-xs text-muted-foreground shrink-0">{new Date(msg.created_at).toLocaleDateString()}</span>
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5 truncate">{msg.message}</p>
                   <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
@@ -102,11 +98,10 @@ export default function AdminMessages() {
         )}
       </div>
 
-      {/* Message Detail Dialog */}
       <Dialog open={!!selected} onOpenChange={() => setSelected(null)}>
         <DialogContent className="bg-card border-border text-foreground max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-foreground">{selected?.inquiryType || "Message"}</DialogTitle>
+            <DialogTitle className="text-foreground">{selected?.inquiry_type || "Message"}</DialogTitle>
           </DialogHeader>
           {selected && (
             <div className="space-y-4">
@@ -127,14 +122,14 @@ export default function AdminMessages() {
                 )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Date:</span>
-                  <span className="text-foreground">{new Date(selected.createdAt).toLocaleString()}</span>
+                  <span className="text-foreground">{new Date(selected.created_at).toLocaleString()}</span>
                 </div>
               </div>
               <div className="bg-background border border-border rounded-xl p-4">
                 <p className="text-foreground text-sm leading-relaxed whitespace-pre-wrap">{selected.message}</p>
               </div>
               <div className="flex gap-2">
-                <a href={`mailto:${selected.email}?subject=Re: ${encodeURIComponent(selected.inquiryType || "Your inquiry at Elparaiso Garden")}`} className="flex-1">
+                <a href={`mailto:${selected.email}?subject=Re: ${encodeURIComponent(selected.inquiry_type || "Your inquiry at Elparaiso Garden")}`} className="flex-1">
                   <Button className="w-full bg-primary text-primary-foreground">Reply via Email</Button>
                 </a>
                 {selected.phone && (
@@ -145,11 +140,10 @@ export default function AdminMessages() {
                   </a>
                 )}
                 <Button variant="ghost" className="text-muted-foreground hover:text-foreground" onClick={() => {
-                  if (selected.isRead) markRead.mutate({ id: selected.id, isRead: false });
-                  else markRead.mutate({ id: selected.id, isRead: true });
-                  setSelected((p: any) => ({ ...p, isRead: !p.isRead }));
+                  markRead.mutate({ id: selected.id, is_read: !selected.is_read });
+                  setSelected((p: any) => ({ ...p, is_read: !p.is_read }));
                 }}>
-                  {selected.isRead ? <Mail className="w-4 h-4" /> : <MailOpen className="w-4 h-4" />}
+                  {selected.is_read ? <Mail className="w-4 h-4" /> : <MailOpen className="w-4 h-4" />}
                 </Button>
               </div>
             </div>
@@ -157,14 +151,13 @@ export default function AdminMessages() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirm */}
       <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
         <DialogContent className="bg-card border-border text-foreground max-w-sm">
           <DialogHeader><DialogTitle>Delete Message</DialogTitle></DialogHeader>
           <p className="text-muted-foreground text-sm">Are you sure you want to delete this message?</p>
           <div className="flex gap-2 mt-4">
             <Button variant="outline" className="flex-1 border-border text-foreground hover:bg-accent" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
-            <Button variant="destructive" className="flex-1" onClick={() => deleteConfirm && del.mutate({ id: deleteConfirm })}>Delete</Button>
+            <Button variant="destructive" className="flex-1" onClick={() => deleteConfirm && del.mutate(deleteConfirm, { onSuccess: () => { setDeleteConfirm(null); toast.success("Message deleted"); } })}>Delete</Button>
           </div>
         </DialogContent>
       </Dialog>

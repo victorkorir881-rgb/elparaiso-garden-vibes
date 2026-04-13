@@ -1,29 +1,26 @@
 import { useState } from "react";
-import { Shield, ShieldCheck, ShieldX } from "lucide-react";
+import { Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { trpc } from "@/lib/trpc";
+import { useAdminUsers, useUpdateUserRole } from "@/lib/supabase-hooks";
 
 const ROLE_COLORS: Record<string, string> = {
+  super_admin: "bg-primary/20 text-primary border-primary/30",
   admin: "bg-primary/20 text-primary border-primary/30",
   manager: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-  editor: "bg-green-500/20 text-green-400 border-green-500/30",
+  staff: "bg-green-500/20 text-green-400 border-green-500/30",
   user: "bg-muted text-muted-foreground border-border",
 };
 
 export default function AdminUsers() {
-  const [roleDialog, setRoleDialog] = useState<{ id: number; name: string; currentRole: string } | null>(null);
+  const [roleDialog, setRoleDialog] = useState<{ id: string; name: string; currentRole: string } | null>(null);
   const [newRole, setNewRole] = useState("user");
 
-  const utils = trpc.useUtils();
-  const { data: users, isLoading } = trpc.admin.users.useQuery();
-  const updateRole = trpc.admin.updateUserRole.useMutation({
-    onSuccess: () => { utils.admin.users.invalidate(); setRoleDialog(null); toast.success("Role updated"); },
-    onError: (e) => toast.error(e.message),
-  });
+  const { data: users, isLoading } = useAdminUsers();
+  const updateRole = useUpdateUserRole();
 
   const openRoleDialog = (user: any) => { setRoleDialog({ id: user.id, name: user.name ?? user.email ?? "User", currentRole: user.role }); setNewRole(user.role); };
 
@@ -35,8 +32,8 @@ export default function AdminUsers() {
       </div>
 
       <div className="bg-card border border-border rounded-xl p-4 text-sm text-muted-foreground">
-        <p><strong className="text-foreground">Role hierarchy:</strong> Admin → Manager → Editor → User</p>
-        <p className="mt-1">Only <strong className="text-primary">Admin</strong> and <strong className="text-blue-400">Manager</strong> and <strong className="text-green-400">Editor</strong> roles can access the admin panel.</p>
+        <p><strong className="text-foreground">Role hierarchy:</strong> Super Admin → Admin → Manager → Staff → User</p>
+        <p className="mt-1">Only <strong className="text-primary">Admin</strong> and above roles can access the admin panel.</p>
       </div>
 
       <div className="bg-card border border-border rounded-xl overflow-hidden">
@@ -92,20 +89,19 @@ export default function AdminUsers() {
           <DialogHeader><DialogTitle>Change Role for {roleDialog?.name}</DialogTitle></DialogHeader>
           <div className="py-2">
             <Select value={newRole} onValueChange={setNewRole}>
-              <SelectTrigger className="bg-input border-border text-foreground">
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger className="bg-input border-border text-foreground"><SelectValue /></SelectTrigger>
               <SelectContent className="bg-popover border-border">
+                <SelectItem value="super_admin" className="text-foreground">Super Admin (full access)</SelectItem>
                 <SelectItem value="admin" className="text-foreground">Admin (full access)</SelectItem>
                 <SelectItem value="manager" className="text-foreground">Manager (manage content)</SelectItem>
-                <SelectItem value="editor" className="text-foreground">Editor (limited access)</SelectItem>
+                <SelectItem value="staff" className="text-foreground">Staff (limited access)</SelectItem>
                 <SelectItem value="user" className="text-foreground">User (no admin access)</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <DialogFooter>
             <Button variant="outline" className="border-border text-foreground hover:bg-accent" onClick={() => setRoleDialog(null)}>Cancel</Button>
-            <Button className="bg-primary text-primary-foreground" onClick={() => roleDialog && updateRole.mutate({ userId: roleDialog.id, role: newRole as any })} disabled={updateRole.isPending}>
+            <Button className="bg-primary text-primary-foreground" onClick={() => roleDialog && updateRole.mutate({ userId: roleDialog.id, role: newRole }, { onSuccess: () => { setRoleDialog(null); toast.success("Role updated"); }, onError: (e) => toast.error(e.message) })} disabled={updateRole.isPending}>
               {updateRole.isPending ? "Saving..." : "Update Role"}
             </Button>
           </DialogFooter>

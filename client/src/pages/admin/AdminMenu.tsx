@@ -9,78 +9,75 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { trpc } from "@/lib/trpc";
+import {
+  useMenuCategories, useMenuItems,
+  useCreateMenuItem, useUpdateMenuItem, useDeleteMenuItem,
+  useCreateMenuCategory, useUpdateMenuCategory, useDeleteMenuCategory,
+} from "@/lib/supabase-hooks";
 
 const FOOD_PLACEHOLDER = "https://images.unsplash.com/photo-1544025162-d76694265947?w=200&q=60";
 
 type ItemForm = {
-  id?: number; categoryId: number; name: string; description: string; price: string;
-  badge: string; isAvailable: boolean; isFeatured: boolean; imageBase64?: string; imageMime?: string; imagePreview?: string;
+  id?: string; categoryId: string; name: string; description: string; price: string;
+  isAvailable: boolean; isFeatured: boolean; imageUrl?: string;
 };
 
 const defaultItemForm = (): ItemForm => ({
-  categoryId: 0, name: "", description: "", price: "", badge: "", isAvailable: true, isFeatured: false,
+  categoryId: "", name: "", description: "", price: "", isAvailable: true, isFeatured: false,
 });
 
 export default function AdminMenu() {
   const [search, setSearch] = useState("");
-  const [activeCatId, setActiveCatId] = useState<number | null>(null);
+  const [activeCatId, setActiveCatId] = useState<string | null>(null);
   const [itemDialog, setItemDialog] = useState(false);
   const [catDialog, setCatDialog] = useState(false);
   const [editItem, setEditItem] = useState<ItemForm>(defaultItemForm());
-  const [editCat, setEditCat] = useState({ id: 0, name: "", slug: "", description: "" });
-  const [deleteConfirm, setDeleteConfirm] = useState<{ type: "item" | "cat"; id: number } | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [editCat, setEditCat] = useState({ id: "", name: "", description: "" });
+  const [deleteConfirm, setDeleteConfirm] = useState<{ type: "item" | "cat"; id: string } | null>(null);
 
-  const utils = trpc.useUtils();
-  const { data: categories } = trpc.menuCategories.list.useQuery({ activeOnly: false });
-  const { data: items } = trpc.menuItems.list.useQuery({ categoryId: activeCatId ?? undefined, search: search || undefined });
+  const { data: categories } = useMenuCategories(false);
+  const { data: items } = useMenuItems({ categoryId: activeCatId ?? undefined, search: search || undefined });
 
-  const createItem = trpc.menuItems.create.useMutation({ onSuccess: () => { utils.menuItems.list.invalidate(); setItemDialog(false); toast.success("Item created"); } });
-  const updateItem = trpc.menuItems.update.useMutation({ onSuccess: () => { utils.menuItems.list.invalidate(); setItemDialog(false); toast.success("Item updated"); } });
-  const deleteItem = trpc.menuItems.delete.useMutation({ onSuccess: () => { utils.menuItems.list.invalidate(); setDeleteConfirm(null); toast.success("Item deleted"); } });
-  const toggleFeatured = trpc.menuItems.toggleFeatured.useMutation({ onSuccess: () => utils.menuItems.list.invalidate() });
-  const toggleAvail = trpc.menuItems.toggleAvailability.useMutation({ onSuccess: () => utils.menuItems.list.invalidate() });
+  const createItem = useCreateMenuItem();
+  const updateItem = useUpdateMenuItem();
+  const deleteItem = useDeleteMenuItem();
 
-  const createCat = trpc.menuCategories.create.useMutation({ onSuccess: () => { utils.menuCategories.list.invalidate(); setCatDialog(false); toast.success("Category created"); } });
-  const updateCat = trpc.menuCategories.update.useMutation({ onSuccess: () => { utils.menuCategories.list.invalidate(); setCatDialog(false); toast.success("Category updated"); } });
-  const deleteCat = trpc.menuCategories.delete.useMutation({ onSuccess: () => { utils.menuCategories.list.invalidate(); setDeleteConfirm(null); toast.success("Category deleted"); } });
-
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setEditItem((prev) => ({ ...prev, imageBase64: ev.target?.result as string, imageMime: file.type, imagePreview: ev.target?.result as string }));
-    };
-    reader.readAsDataURL(file);
-  };
+  const createCat = useCreateMenuCategory();
+  const updateCat = useUpdateMenuCategory();
+  const deleteCat = useDeleteMenuCategory();
 
   const saveItem = () => {
     if (!editItem.name || !editItem.price || !editItem.categoryId) return toast.error("Name, price, and category are required");
     const payload = {
-      categoryId: editItem.categoryId, name: editItem.name, description: editItem.description || undefined,
-      price: editItem.price, badge: editItem.badge || undefined, isAvailable: editItem.isAvailable,
-      isFeatured: editItem.isFeatured, imageBase64: editItem.imageBase64, imageMime: editItem.imageMime,
+      category_id: editItem.categoryId, name: editItem.name, description: editItem.description || undefined,
+      price: parseFloat(editItem.price), is_available: editItem.isAvailable,
+      is_featured: editItem.isFeatured, image_url: editItem.imageUrl,
     };
-    if (editItem.id) updateItem.mutate({ id: editItem.id, ...payload });
-    else createItem.mutate(payload);
+    if (editItem.id) {
+      updateItem.mutate({ id: editItem.id, ...payload }, { onSuccess: () => { setItemDialog(false); toast.success("Item updated"); } });
+    } else {
+      const id = editItem.name.toLowerCase().replace(/\s+/g, "-") + "-" + Date.now();
+      createItem.mutate({ id, ...payload }, { onSuccess: () => { setItemDialog(false); toast.success("Item created"); } });
+    }
   };
 
   const saveCat = () => {
     if (!editCat.name) return toast.error("Name is required");
-    const slug = editCat.slug || editCat.name.toLowerCase().replace(/\s+/g, "-");
-    if (editCat.id) updateCat.mutate({ id: editCat.id, name: editCat.name, slug, description: editCat.description || undefined });
-    else createCat.mutate({ name: editCat.name, slug, description: editCat.description || undefined });
+    const id = editCat.id || editCat.name.toLowerCase().replace(/\s+/g, "-");
+    if (editCat.id) {
+      updateCat.mutate({ id: editCat.id, name: editCat.name, description: editCat.description || undefined }, { onSuccess: () => { setCatDialog(false); toast.success("Category updated"); } });
+    } else {
+      createCat.mutate({ id, name: editCat.name, description: editCat.description || undefined }, { onSuccess: () => { setCatDialog(false); toast.success("Category created"); } });
+    }
   };
 
   const openNewItem = () => {
-    setEditItem({ ...defaultItemForm(), categoryId: activeCatId ?? (categories?.[0]?.id ?? 0) });
+    setEditItem({ ...defaultItemForm(), categoryId: activeCatId ?? (categories?.[0]?.id ?? "") });
     setItemDialog(true);
   };
 
   const openEditItem = (item: any) => {
-    setEditItem({ id: item.id, categoryId: item.categoryId, name: item.name, description: item.description ?? "", price: String(item.price), badge: item.badge ?? "", isAvailable: item.isAvailable, isFeatured: item.isFeatured });
+    setEditItem({ id: item.id, categoryId: item.category_id, name: item.name, description: item.description ?? "", price: String(item.price), isAvailable: item.is_available, isFeatured: item.is_featured, imageUrl: item.image_url });
     setItemDialog(true);
   };
 
@@ -92,7 +89,7 @@ export default function AdminMenu() {
           <p className="text-muted-foreground text-sm mt-1">Manage categories and menu items</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="border-border text-foreground hover:bg-accent" onClick={() => { setEditCat({ id: 0, name: "", slug: "", description: "" }); setCatDialog(true); }}>
+          <Button variant="outline" size="sm" className="border-border text-foreground hover:bg-accent" onClick={() => { setEditCat({ id: "", name: "", description: "" }); setCatDialog(true); }}>
             <Plus className="w-4 h-4 mr-1" /> Category
           </Button>
           <Button size="sm" className="bg-primary text-primary-foreground" onClick={openNewItem}>
@@ -101,7 +98,6 @@ export default function AdminMenu() {
         </div>
       </div>
 
-      {/* Categories */}
       <div className="bg-card border border-border rounded-xl p-4">
         <h2 className="font-semibold text-foreground mb-3 text-sm">Categories</h2>
         <div className="flex flex-wrap gap-2">
@@ -113,7 +109,7 @@ export default function AdminMenu() {
               <button onClick={() => setActiveCatId(cat.id)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${activeCatId === cat.id ? "bg-primary text-primary-foreground" : "bg-background border border-border text-muted-foreground hover:text-foreground"}`}>
                 {cat.name}
               </button>
-              <button onClick={() => { setEditCat({ id: cat.id, name: cat.name, slug: cat.slug, description: cat.description ?? "" }); setCatDialog(true); }} className="text-muted-foreground hover:text-primary p-1">
+              <button onClick={() => { setEditCat({ id: cat.id, name: cat.name, description: cat.description ?? "" }); setCatDialog(true); }} className="text-muted-foreground hover:text-primary p-1">
                 <Pencil className="w-3 h-3" />
               </button>
               <button onClick={() => setDeleteConfirm({ type: "cat", id: cat.id })} className="text-muted-foreground hover:text-destructive p-1">
@@ -124,13 +120,11 @@ export default function AdminMenu() {
         </div>
       </div>
 
-      {/* Search */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input placeholder="Search items..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10 bg-card border-border text-foreground placeholder:text-muted-foreground" />
       </div>
 
-      {/* Items Table */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -149,23 +143,22 @@ export default function AdminMenu() {
                 <tr key={item.id} className="border-b border-border last:border-0 hover:bg-accent/30 transition-colors">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <img src={item.imageUrl ?? FOOD_PLACEHOLDER} alt={item.name} className="w-10 h-10 rounded-lg object-cover" />
+                      <img src={item.image_url ?? FOOD_PLACEHOLDER} alt={item.name} className="w-10 h-10 rounded-lg object-cover" />
                       <div>
                         <div className="font-medium text-foreground">{item.name}</div>
-                        {item.badge && <Badge className="text-xs bg-primary/20 text-primary border-primary/30 mt-0.5">{item.badge}</Badge>}
                       </div>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
-                    {categories?.find((c) => c.id === item.categoryId)?.name ?? "—"}
+                    {categories?.find((c) => c.id === item.category_id)?.name ?? "—"}
                   </td>
                   <td className="px-4 py-3 text-primary font-semibold">KES {Number(item.price).toLocaleString()}</td>
                   <td className="px-4 py-3 text-center">
-                    <Switch checked={item.isAvailable} onCheckedChange={(v) => toggleAvail.mutate({ id: item.id, isAvailable: v })} />
+                    <Switch checked={item.is_available} onCheckedChange={(v) => updateItem.mutate({ id: item.id, is_available: v })} />
                   </td>
                   <td className="px-4 py-3 text-center">
-                    <button onClick={() => toggleFeatured.mutate({ id: item.id, isFeatured: !item.isFeatured })}>
-                      <Star className={`w-4 h-4 mx-auto ${item.isFeatured ? "fill-primary text-primary" : "text-muted-foreground"}`} />
+                    <button onClick={() => updateItem.mutate({ id: item.id, is_featured: !item.is_featured })}>
+                      <Star className={`w-4 h-4 mx-auto ${item.is_featured ? "fill-primary text-primary" : "text-muted-foreground"}`} />
                     </button>
                   </td>
                   <td className="px-4 py-3 text-right">
@@ -195,12 +188,12 @@ export default function AdminMenu() {
           <div className="space-y-4 py-2">
             <div>
               <Label className="text-foreground">Category *</Label>
-              <Select value={String(editItem.categoryId)} onValueChange={(v) => setEditItem((p) => ({ ...p, categoryId: Number(v) }))}>
+              <Select value={editItem.categoryId} onValueChange={(v) => setEditItem((p) => ({ ...p, categoryId: v }))}>
                 <SelectTrigger className="bg-input border-border text-foreground mt-1">
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent className="bg-popover border-border">
-                  {categories?.map((c) => <SelectItem key={c.id} value={String(c.id)} className="text-foreground">{c.name}</SelectItem>)}
+                  {categories?.map((c) => <SelectItem key={c.id} value={c.id} className="text-foreground">{c.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -219,18 +212,8 @@ export default function AdminMenu() {
               <Textarea value={editItem.description} onChange={(e) => setEditItem((p) => ({ ...p, description: e.target.value }))} className="bg-input border-border text-foreground mt-1 resize-none" rows={2} placeholder="Brief description..." />
             </div>
             <div>
-              <Label className="text-foreground">Badge (optional)</Label>
-              <Input value={editItem.badge} onChange={(e) => setEditItem((p) => ({ ...p, badge: e.target.value }))} className="bg-input border-border text-foreground mt-1" placeholder="e.g. New, Popular, Chef's Pick" />
-            </div>
-            <div>
-              <Label className="text-foreground">Image</Label>
-              <div className="mt-1 flex items-center gap-3">
-                {editItem.imagePreview && <img src={editItem.imagePreview} alt="preview" className="w-16 h-16 rounded-lg object-cover" />}
-                <Button type="button" variant="outline" size="sm" className="border-border text-foreground hover:bg-accent" onClick={() => fileRef.current?.click()}>
-                  {editItem.imagePreview ? "Change Image" : "Upload Image"}
-                </Button>
-                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
-              </div>
+              <Label className="text-foreground">Image URL</Label>
+              <Input value={editItem.imageUrl ?? ""} onChange={(e) => setEditItem((p) => ({ ...p, imageUrl: e.target.value }))} className="bg-input border-border text-foreground mt-1" placeholder="https://..." />
             </div>
             <div className="flex gap-6">
               <div className="flex items-center gap-2">
@@ -262,10 +245,6 @@ export default function AdminMenu() {
               <Input value={editCat.name} onChange={(e) => setEditCat((p) => ({ ...p, name: e.target.value }))} className="bg-input border-border text-foreground mt-1" placeholder="Category name" />
             </div>
             <div>
-              <Label className="text-foreground">Slug (auto-generated if empty)</Label>
-              <Input value={editCat.slug} onChange={(e) => setEditCat((p) => ({ ...p, slug: e.target.value }))} className="bg-input border-border text-foreground mt-1" placeholder="e.g. grills-and-platters" />
-            </div>
-            <div>
               <Label className="text-foreground">Description</Label>
               <Textarea value={editCat.description} onChange={(e) => setEditCat((p) => ({ ...p, description: e.target.value }))} className="bg-input border-border text-foreground mt-1 resize-none" rows={2} />
             </div>
@@ -288,8 +267,8 @@ export default function AdminMenu() {
             <Button variant="outline" className="border-border text-foreground hover:bg-accent" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
             <Button variant="destructive" onClick={() => {
               if (!deleteConfirm) return;
-              if (deleteConfirm.type === "item") deleteItem.mutate({ id: deleteConfirm.id });
-              else deleteCat.mutate({ id: deleteConfirm.id });
+              if (deleteConfirm.type === "item") deleteItem.mutate(deleteConfirm.id, { onSuccess: () => { setDeleteConfirm(null); toast.success("Item deleted"); } });
+              else deleteCat.mutate(deleteConfirm.id, { onSuccess: () => { setDeleteConfirm(null); toast.success("Category deleted"); } });
             }}>Delete</Button>
           </DialogFooter>
         </DialogContent>

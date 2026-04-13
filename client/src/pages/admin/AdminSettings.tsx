@@ -7,13 +7,13 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { trpc } from "@/lib/trpc";
+import { useSettings, useUpdateSettings } from "@/lib/supabase-hooks";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 export default function AdminSettings() {
-  const { data: settings, isLoading } = trpc.settings.get.useQuery();
-  const update = trpc.settings.update.useMutation({ onSuccess: () => toast.success("Settings saved") });
+  const { data: settings, isLoading } = useSettings();
+  const update = useUpdateSettings();
 
   const [form, setForm] = useState({
     siteName: "", tagline: "", description: "", phone: "", phone2: "", email: "", address: "", city: "", mapUrl: "",
@@ -28,7 +28,8 @@ export default function AdminSettings() {
     if (settings) {
       const hours: Record<string, { open: string; close: string; closed: boolean }> = {};
       DAYS.forEach((d) => {
-        const existing = (settings.openingHours as any)?.[d] ?? {};
+        let existing: any = {};
+        try { existing = settings.openingHours ? JSON.parse(settings.openingHours)?.[d] ?? {} : {}; } catch { existing = {}; }
         hours[d] = { open: existing.open ?? "07:00", close: existing.close ?? "23:00", closed: existing.closed ?? false };
       });
       setForm({
@@ -72,7 +73,7 @@ export default function AdminSettings() {
     payload.enableEvents = String(enableEvents);
     payload.enableTestimonials = String(enableTestimonials);
     payload.announcementBarEnabled = String(announcementBarEnabled);
-    update.mutate(payload);
+    update.mutate(payload, { onSuccess: () => toast.success("Settings saved") });
   };
 
   const setHours = (day: string, field: string, value: any) => {

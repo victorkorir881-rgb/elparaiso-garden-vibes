@@ -1,12 +1,12 @@
 import { CalendarCheck, MessageSquare, Images, UtensilsCrossed, PartyPopper, TrendingUp, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { trpc } from "@/lib/trpc";
+import { useAdminDashboardStats, useReservations, useActivityLog } from "@/lib/supabase-hooks";
 import { Link } from "wouter";
 
 export default function AdminDashboard() {
-  const { data: stats, isLoading } = trpc.admin.dashboard.useQuery();
-  const { data: activity } = trpc.admin.activityLog.useQuery();
-  const { data: recentRes } = trpc.reservations.list.useQuery({});
+  const { data: stats, isLoading } = useAdminDashboardStats();
+  const { data: activity } = useActivityLog();
+  const { data: recentRes } = useReservations({});
 
   const statCards = [
     { label: "Today's Reservations", value: stats?.reservationsToday ?? 0, sub: `${stats?.pendingReservations ?? 0} pending`, icon: CalendarCheck, href: "/admin/reservations", color: "text-blue-400" },
@@ -31,7 +31,6 @@ export default function AdminDashboard() {
         <p className="text-muted-foreground text-sm mt-1">Overview of Elparaiso Garden operations</p>
       </div>
 
-      {/* Stats Grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {statCards.map((card) => (
           <Link key={card.label} href={card.href}>
@@ -49,7 +48,6 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      {/* Recent Reservations + Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-card border border-border rounded-xl p-5">
           <div className="flex items-center justify-between mb-4">
@@ -62,7 +60,7 @@ export default function AdminDashboard() {
                 <div key={r.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                   <div>
                     <div className="text-sm font-medium text-foreground">{r.name}</div>
-                    <div className="text-xs text-muted-foreground">{r.date} · {r.time} · {r.guests} guests</div>
+                    <div className="text-xs text-muted-foreground">{r.date} · {r.time} · {r.party_size} guests</div>
                   </div>
                   <Badge className={`text-xs border ${statusColor[r.status] ?? statusColor.pending}`}>
                     {r.status}
@@ -75,7 +73,6 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        {/* Activity Log */}
         <div className="bg-card border border-border rounded-xl p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-foreground">Recent Activity</h2>
@@ -89,7 +86,7 @@ export default function AdminDashboard() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm text-foreground truncate">{log.action}</div>
-                    <div className="text-xs text-muted-foreground">{new Date(log.createdAt).toLocaleString()}</div>
+                    <div className="text-xs text-muted-foreground">{new Date(log.created_at).toLocaleString()}</div>
                   </div>
                 </div>
               ))}
@@ -100,7 +97,6 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Quick Actions */}
       <div className="bg-card border border-border rounded-xl p-5">
         <h2 className="font-semibold text-foreground mb-4">Quick Actions</h2>
         <div className="flex flex-wrap gap-3">

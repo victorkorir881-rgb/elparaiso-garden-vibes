@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { trpc } from "@/lib/trpc";
+import { useOrders, useOrderStats, useUpdateOrder, useDeleteOrder } from "@/lib/supabase-hooks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -32,68 +32,50 @@ export default function AdminOrders() {
   const [editingNotes, setEditingNotes] = useState("");
   const [editingTime, setEditingTime] = useState("");
 
-  const { data: orders = [], isLoading } = trpc.orders.list.useQuery({
+  const { data: orders = [], isLoading } = useOrders({
     status: filterStatus || undefined,
-    orderType: filterType || undefined,
     search: search || undefined,
   });
 
-  const { data: stats } = trpc.orders.stats.useQuery();
-
-  const updateOrder = trpc.orders.update.useMutation({
-    onSuccess: () => {
-      toast.success("Order updated successfully");
-      setSelectedOrder(null);
-    },
-    onError: () => toast.error("Failed to update order"),
-  });
-
-  const deleteOrder = trpc.orders.delete.useMutation({
-    onSuccess: () => {
-      toast.success("Order deleted");
-      setSelectedOrder(null);
-    },
-    onError: () => toast.error("Failed to delete order"),
-  });
+  const { data: stats } = useOrderStats();
+  const updateOrder = useUpdateOrder();
+  const deleteOrder = useDeleteOrder();
 
   const handleUpdateOrder = async () => {
     if (!selectedOrder) return;
-    await updateOrder.mutateAsync({
+    updateOrder.mutate({
       id: selectedOrder.id,
-      status: editingStatus as any,
-      adminNotes: editingNotes,
-      estimatedTime: editingTime ? parseInt(editingTime) : undefined,
+      status: editingStatus,
+      admin_notes: editingNotes,
+      estimated_time: editingTime ? parseInt(editingTime) : undefined,
+    }, {
+      onSuccess: () => { toast.success("Order updated"); setSelectedOrder(null); },
+      onError: () => toast.error("Failed to update order"),
     });
   };
 
-  const handleDeleteOrder = async (id: number) => {
+  const handleDeleteOrder = async (id: string) => {
     if (confirm("Are you sure you want to delete this order?")) {
-      await deleteOrder.mutateAsync({ id });
+      deleteOrder.mutate(id, {
+        onSuccess: () => { toast.success("Order deleted"); setSelectedOrder(null); },
+        onError: () => toast.error("Failed to delete order"),
+      });
     }
   };
 
   const openOrderDetails = (order: any) => {
     setSelectedOrder(order);
     setEditingStatus(order.status);
-    setEditingNotes(order.adminNotes || "");
-    setEditingTime(order.estimatedTime?.toString() || "");
+    setEditingNotes(order.admin_notes || "");
+    setEditingTime(order.estimated_time?.toString() || "");
   };
 
   const filteredOrders = useMemo(() => {
     return orders.filter((order: any) => {
-      if (filterStatus && order.status !== filterStatus) return false;
-      if (filterType && order.orderType !== filterType) return false;
-      if (search) {
-        const searchLower = search.toLowerCase();
-        return (
-          order.orderNumber.toLowerCase().includes(searchLower) ||
-          order.customerName.toLowerCase().includes(searchLower) ||
-          order.customerPhone.includes(search)
-        );
-      }
+      if (filterType && order.order_type !== filterType) return false;
       return true;
     });
-  }, [orders, filterStatus, filterType, search]);
+  }, [orders, filterType]);
 
   return (
     <div className="space-y-6">
@@ -125,47 +107,26 @@ export default function AdminOrders() {
 
       <Card className="p-4">
         <div className="grid md:grid-cols-4 gap-4">
-          <Input
-            placeholder="Search by order #, name, or phone..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+          <Input placeholder="Search by order #, name, or phone..." value={search} onChange={(e) => setSearch(e.target.value)} />
           <Select value={filterStatus} onValueChange={setFilterStatus}>
-            <SelectTrigger>
-              <SelectValue placeholder="Filter by status" />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Filter by status" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="">All Statuses</SelectItem>
               {statusOptions.map((status) => (
-                <SelectItem key={status} value={status}>
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
-                </SelectItem>
+                <SelectItem key={status} value={status}>{status.charAt(0).toUpperCase() + status.slice(1)}</SelectItem>
               ))}
             </SelectContent>
           </Select>
           <Select value={filterType} onValueChange={setFilterType}>
-            <SelectTrigger>
-              <SelectValue placeholder="Filter by type" />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Filter by type" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="">All Types</SelectItem>
               {orderTypeOptions.map((type) => (
-                <SelectItem key={type} value={type}>
-                  {type.charAt(0).toUpperCase() + type.slice(1)}
-                </SelectItem>
+                <SelectItem key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1)}</SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setFilterStatus("");
-              setFilterType("");
-              setSearch("");
-            }}
-          >
-            Reset Filters
-          </Button>
+          <Button variant="outline" onClick={() => { setFilterStatus(""); setFilterType(""); setSearch(""); }}>Reset Filters</Button>
         </div>
       </Card>
 
@@ -184,18 +145,16 @@ export default function AdminOrders() {
               <div className="grid md:grid-cols-5 gap-4 items-center">
                 <div>
                   <p className="text-sm text-foreground/60">Order #</p>
-                  <p className="font-semibold font-display">{order.orderNumber}</p>
+                  <p className="font-semibold font-display">{order.order_number}</p>
                 </div>
                 <div>
                   <p className="text-sm text-foreground/60">Customer</p>
-                  <p className="font-medium">{order.customerName}</p>
-                  <p className="text-xs text-foreground/60">{order.customerPhone}</p>
+                  <p className="font-medium">{order.customer_name}</p>
+                  <p className="text-xs text-foreground/60">{order.customer_phone}</p>
                 </div>
                 <div>
                   <p className="text-sm text-foreground/60">Type</p>
-                  <Badge variant="outline" className="capitalize">
-                    {order.orderType}
-                  </Badge>
+                  <Badge variant="outline" className="capitalize">{order.order_type}</Badge>
                 </div>
                 <div>
                   <p className="text-sm text-foreground/60">Status</p>
@@ -204,36 +163,32 @@ export default function AdminOrders() {
                 <div className="flex gap-2 justify-end">
                   <Dialog>
                     <DialogTrigger asChild>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => openOrderDetails(order)}
-                      >
+                      <Button size="sm" variant="outline" onClick={() => openOrderDetails(order)}>
                         <Eye className="w-4 h-4" />
                       </Button>
                     </DialogTrigger>
                     <DialogContent className="max-w-2xl">
                       <DialogHeader>
-                        <DialogTitle>Order Details: {selectedOrder?.orderNumber}</DialogTitle>
+                        <DialogTitle>Order Details: {selectedOrder?.order_number}</DialogTitle>
                       </DialogHeader>
                       {selectedOrder && (
                         <div className="space-y-4">
                           <div className="grid md:grid-cols-2 gap-4">
                             <div>
                               <label className="text-sm font-medium">Customer Name</label>
-                              <p className="text-foreground/70">{selectedOrder.customerName}</p>
+                              <p className="text-foreground/70">{selectedOrder.customer_name}</p>
                             </div>
                             <div>
                               <label className="text-sm font-medium">Phone</label>
-                              <p className="text-foreground/70">{selectedOrder.customerPhone}</p>
+                              <p className="text-foreground/70">{selectedOrder.customer_phone}</p>
                             </div>
                             <div>
                               <label className="text-sm font-medium">Order Type</label>
-                              <p className="text-foreground/70 capitalize">{selectedOrder.orderType}</p>
+                              <p className="text-foreground/70 capitalize">{selectedOrder.order_type}</p>
                             </div>
                             <div>
                               <label className="text-sm font-medium">Total Amount</label>
-                              <p className="text-lg font-bold text-primary">KES {parseFloat(selectedOrder.totalAmount).toLocaleString()}</p>
+                              <p className="text-lg font-bold text-primary">KES {parseFloat(selectedOrder.total_amount).toLocaleString()}</p>
                             </div>
                           </div>
 
@@ -253,14 +208,10 @@ export default function AdminOrders() {
                           <div>
                             <label className="text-sm font-medium mb-2 block">Status</label>
                             <Select value={editingStatus} onValueChange={setEditingStatus}>
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
+                              <SelectTrigger><SelectValue /></SelectTrigger>
                               <SelectContent>
                                 {statusOptions.map((status) => (
-                                  <SelectItem key={status} value={status}>
-                                    {status.charAt(0).toUpperCase() + status.slice(1)}
-                                  </SelectItem>
+                                  <SelectItem key={status} value={status}>{status.charAt(0).toUpperCase() + status.slice(1)}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
@@ -268,37 +219,19 @@ export default function AdminOrders() {
 
                           <div>
                             <label className="text-sm font-medium mb-2 block">Estimated Time (minutes)</label>
-                            <Input
-                              type="number"
-                              value={editingTime}
-                              onChange={(e) => setEditingTime(e.target.value)}
-                              placeholder="e.g., 30"
-                            />
+                            <Input type="number" value={editingTime} onChange={(e) => setEditingTime(e.target.value)} placeholder="e.g., 30" />
                           </div>
 
                           <div>
                             <label className="text-sm font-medium mb-2 block">Admin Notes</label>
-                            <Textarea
-                              value={editingNotes}
-                              onChange={(e) => setEditingNotes(e.target.value)}
-                              placeholder="Add internal notes..."
-                              rows={3}
-                            />
+                            <Textarea value={editingNotes} onChange={(e) => setEditingNotes(e.target.value)} placeholder="Add internal notes..." rows={3} />
                           </div>
 
                           <div className="flex gap-2 justify-end pt-4 border-t">
-                            <Button
-                              variant="outline"
-                              onClick={() => handleDeleteOrder(selectedOrder.id)}
-                              disabled={deleteOrder.isPending}
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Delete
+                            <Button variant="outline" onClick={() => handleDeleteOrder(selectedOrder.id)} disabled={deleteOrder.isPending}>
+                              <Trash2 className="w-4 h-4 mr-2" /> Delete
                             </Button>
-                            <Button
-                              onClick={handleUpdateOrder}
-                              disabled={updateOrder.isPending}
-                            >
+                            <Button onClick={handleUpdateOrder} disabled={updateOrder.isPending}>
                               {updateOrder.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Edit2 className="w-4 h-4 mr-2" />}
                               Save Changes
                             </Button>

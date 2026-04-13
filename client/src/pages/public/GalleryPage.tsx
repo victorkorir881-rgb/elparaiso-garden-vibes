@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { X } from "lucide-react";
-import { trpc } from "@/lib/trpc";
+import { useGalleryImages } from "@/lib/supabase-hooks";
 import PublicLayout from "@/components/public/PublicLayout";
 
 const CATEGORIES = ["All", "Food & Drinks", "Ambience", "Outdoor Seating", "Night Vibes", "Events", "Bar Area"];
@@ -9,7 +9,7 @@ export default function GalleryPage() {
   const [activeCategory, setActiveCategory] = useState("All");
   const [lightbox, setLightbox] = useState<string | null>(null);
 
-  const { data: images, isLoading } = trpc.gallery.list.useQuery({
+  const { data: images, isLoading } = useGalleryImages({
     category: activeCategory !== "All" ? activeCategory : undefined,
   });
 
@@ -27,7 +27,6 @@ export default function GalleryPage() {
 
       <section className="section-padding bg-background">
         <div className="container">
-          {/* Category Filter */}
           <div className="flex flex-wrap gap-2 justify-center mb-10">
             {CATEGORIES.map((cat) => (
               <button
@@ -56,11 +55,11 @@ export default function GalleryPage() {
                 <div
                   key={img.id}
                   className="rounded-xl overflow-hidden cursor-pointer break-inside-avoid"
-                  onClick={() => setLightbox(img.imageUrl)}
+                  onClick={() => setLightbox(img.image_url)}
                 >
                   <img
-                    src={img.imageUrl}
-                    alt={img.altText ?? "Elparaiso Gallery"}
+                    src={img.image_url}
+                    alt={img.alt_text ?? "Elparaiso Gallery"}
                     className="w-full object-cover hover:scale-105 transition-transform duration-500"
                     loading="lazy"
                   />
@@ -75,24 +74,12 @@ export default function GalleryPage() {
         </div>
       </section>
 
-      {/* Lightbox */}
       {lightbox && (
-        <div
-          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
-          onClick={() => setLightbox(null)}
-        >
-          <button
-            className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors"
-            onClick={() => setLightbox(null)}
-          >
+        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
+          <button className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors" onClick={() => setLightbox(null)}>
             <X className="w-8 h-8" />
           </button>
-          <img
-            src={lightbox}
-            alt="Gallery"
-            className="max-w-full max-h-[90vh] rounded-xl object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
+          <img src={lightbox} alt="Gallery" className="max-w-full max-h-[90vh] rounded-xl object-contain" onClick={(e) => e.stopPropagation()} />
         </div>
       )}
     </PublicLayout>

@@ -2,17 +2,17 @@ import { useState } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { trpc } from "@/lib/trpc";
+import { useMenuCategories, useMenuItems } from "@/lib/supabase-hooks";
 import PublicLayout from "@/components/public/PublicLayout";
 
 const FOOD_PLACEHOLDER = "https://images.unsplash.com/photo-1544025162-d76694265947?w=400&q=80";
 
 export default function MenuPage() {
-  const [activeCategory, setActiveCategory] = useState<number | null>(null);
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
-  const { data: categories, isLoading: catsLoading } = trpc.menuCategories.list.useQuery({ activeOnly: true });
-  const { data: items, isLoading: itemsLoading } = trpc.menuItems.list.useQuery({
+  const { data: categories, isLoading: catsLoading } = useMenuCategories(true);
+  const { data: items, isLoading: itemsLoading } = useMenuItems({
     categoryId: activeCategory ?? undefined,
     availableOnly: true,
     search: search || undefined,
@@ -22,7 +22,6 @@ export default function MenuPage() {
 
   return (
     <PublicLayout>
-      {/* Header */}
       <section className="py-20 bg-card/50 border-b border-border">
         <div className="container text-center">
           <h1 className="section-title text-foreground mb-4">Our Menu</h1>
@@ -35,47 +34,24 @@ export default function MenuPage() {
 
       <section className="section-padding bg-background">
         <div className="container">
-          {/* Search */}
           <div className="relative max-w-md mx-auto mb-8">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search menu items..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-10 bg-card border-border text-foreground placeholder:text-muted-foreground"
-            />
+            <Input placeholder="Search menu items..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10 bg-card border-border text-foreground placeholder:text-muted-foreground" />
           </div>
 
-          {/* Category Tabs */}
           {categories && categories.length > 0 && (
             <div className="flex flex-wrap gap-2 justify-center mb-10">
-              <button
-                onClick={() => setActiveCategory(null)}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                  activeCategory === null
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-card border border-border text-muted-foreground hover:text-foreground hover:border-primary/50"
-                }`}
-              >
+              <button onClick={() => setActiveCategory(null)} className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${activeCategory === null ? "bg-primary text-primary-foreground" : "bg-card border border-border text-muted-foreground hover:text-foreground hover:border-primary/50"}`}>
                 All
               </button>
               {categories.map((cat) => (
-                <button
-                  key={cat.id}
-                  onClick={() => setActiveCategory(cat.id)}
-                  className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                    activeCategory === cat.id
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-card border border-border text-muted-foreground hover:text-foreground hover:border-primary/50"
-                  }`}
-                >
+                <button key={cat.id} onClick={() => setActiveCategory(cat.id)} className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${activeCategory === cat.id ? "bg-primary text-primary-foreground" : "bg-card border border-border text-muted-foreground hover:text-foreground hover:border-primary/50"}`}>
                   {cat.name}
                 </button>
               ))}
             </div>
           )}
 
-          {/* Items Grid */}
           {isLoading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
               {[...Array(8)].map((_, i) => (
@@ -94,16 +70,8 @@ export default function MenuPage() {
               {items.map((item) => (
                 <div key={item.id} className="bg-card border border-border rounded-xl overflow-hidden card-hover">
                   <div className="relative h-48 overflow-hidden bg-muted">
-                    <img
-                      src={item.imageUrl ?? FOOD_PLACEHOLDER}
-                      alt={item.name}
-                      className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
-                      loading="lazy"
-                    />
-                    {item.badge && (
-                      <Badge className="absolute top-3 left-3 bg-primary text-primary-foreground text-xs">{item.badge}</Badge>
-                    )}
-                    {item.isFeatured && !item.badge && (
+                    <img src={item.image_url ?? FOOD_PLACEHOLDER} alt={item.name} className="w-full h-full object-cover transition-transform duration-500 hover:scale-105" loading="lazy" />
+                    {item.is_featured && (
                       <Badge className="absolute top-3 left-3 bg-primary/80 text-primary-foreground text-xs">Featured</Badge>
                     )}
                   </div>

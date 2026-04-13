@@ -1,10 +1,10 @@
 import { Calendar, Clock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { trpc } from "@/lib/trpc";
+import { useEvents } from "@/lib/supabase-hooks";
 import PublicLayout from "@/components/public/PublicLayout";
 
 export default function EventsPage() {
-  const { data: events, isLoading } = trpc.events.list.useQuery({ activeOnly: true });
+  const { data: events, isLoading } = useEvents({ activeOnly: true });
 
   return (
     <PublicLayout>
@@ -36,12 +36,12 @@ export default function EventsPage() {
           ) : events && events.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {events.map((evt) => {
-                const isFuture = evt.eventDate && new Date(evt.eventDate) >= new Date();
+                const isFuture = evt.event_date && new Date(evt.event_date) >= new Date();
                 return (
                   <div key={evt.id} className="bg-card border border-border rounded-xl overflow-hidden card-hover">
-                    {evt.imageUrl && (
+                    {evt.image_url && (
                       <div className="h-52 overflow-hidden">
-                        <img src={evt.imageUrl} alt={evt.title} className="w-full h-full object-cover hover:scale-105 transition-transform duration-500" loading="lazy" />
+                        <img src={evt.image_url} alt={evt.title} className="w-full h-full object-cover hover:scale-105 transition-transform duration-500" loading="lazy" />
                       </div>
                     )}
                     <div className="p-5">
@@ -49,28 +49,22 @@ export default function EventsPage() {
                         <h3 className="font-display font-semibold text-foreground text-lg">{evt.title}</h3>
                         {isFuture && <Badge className="bg-primary/20 text-primary border-primary/30 text-xs shrink-0">Upcoming</Badge>}
                       </div>
-                      {evt.subtitle && <p className="text-primary text-sm font-medium mb-2">{evt.subtitle}</p>}
                       {evt.description && <p className="text-muted-foreground text-sm leading-relaxed mb-4">{evt.description}</p>}
-                      {(evt.eventDate || evt.startTime) && (
+                      {(evt.event_date || evt.start_time) && (
                         <div className="flex flex-wrap gap-3 text-xs text-muted-foreground mb-4">
-                          {evt.eventDate && (
+                          {evt.event_date && (
                             <div className="flex items-center gap-1">
                               <Calendar className="w-3.5 h-3.5 text-primary" />
-                              {evt.eventDate}
+                              {evt.event_date}
                             </div>
                           )}
-                          {evt.startTime && (
+                          {evt.start_time && (
                             <div className="flex items-center gap-1">
                               <Clock className="w-3.5 h-3.5 text-primary" />
-                              {evt.startTime}{evt.endTime ? ` – ${evt.endTime}` : ""}
+                              {evt.start_time}{evt.end_time ? ` – ${evt.end_time}` : ""}
                             </div>
                           )}
                         </div>
-                      )}
-                      {evt.ctaLabel && evt.ctaUrl && (
-                        <a href={evt.ctaUrl} className="inline-flex items-center text-primary text-sm font-medium hover:underline">
-                          {evt.ctaLabel} →
-                        </a>
                       )}
                     </div>
                   </div>

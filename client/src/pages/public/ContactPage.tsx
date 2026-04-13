@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { toast } from "sonner";
-import { trpc } from "@/lib/trpc";
+import { useSettings, useSubmitContact } from "@/lib/supabase-hooks";
 import PublicLayout from "@/components/public/PublicLayout";
 
 const schema = z.object({
@@ -26,22 +26,24 @@ const INQUIRY_TYPES = ["General Inquiry", "Reservation", "Private Event", "Deliv
 
 export default function ContactPage() {
   const [submitted, setSubmitted] = useState(false);
-  const { data: settings } = trpc.settings.get.useQuery();
+  const { data: settings } = useSettings();
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { name: "", phone: "", email: "", inquiryType: "", message: "" },
   });
 
-  const submitMutation = trpc.contact.submit.useMutation({
-    onSuccess: () => {
-      setSubmitted(true);
-      form.reset();
-    },
-    onError: (err) => toast.error(err.message ?? "Failed to send message"),
-  });
+  const submitMutation = useSubmitContact();
 
-  const onSubmit = (data: FormData) => submitMutation.mutate(data);
+  const onSubmit = (data: FormData) => {
+    submitMutation.mutate(
+      { name: data.name, phone: data.phone, email: data.email || undefined, inquiry_type: data.inquiryType, message: data.message },
+      {
+        onSuccess: () => { setSubmitted(true); form.reset(); },
+        onError: (err) => toast.error(err.message ?? "Failed to send message"),
+      }
+    );
+  };
 
   const phone = settings?.phone ?? "0791 224513";
   const whatsapp = settings?.whatsapp ?? "254791224513";
@@ -64,7 +66,6 @@ export default function ContactPage() {
       <section className="section-padding bg-background">
         <div className="container">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-            {/* Contact Info */}
             <div>
               <div className="bg-card border border-border rounded-xl p-6 mb-6">
                 <h2 className="font-display font-semibold text-xl text-foreground mb-5">Get In Touch</h2>
@@ -95,23 +96,16 @@ export default function ContactPage() {
 
               <div className="flex flex-col sm:flex-row gap-3 mb-6">
                 <a href={`tel:${phone}`} className="flex-1">
-                  <Button className="w-full bg-primary text-primary-foreground">
-                    <Phone className="w-4 h-4 mr-2" /> Call Now
-                  </Button>
+                  <Button className="w-full bg-primary text-primary-foreground"><Phone className="w-4 h-4 mr-2" /> Call Now</Button>
                 </a>
                 <a href={`https://wa.me/${whatsapp}`} target="_blank" rel="noopener noreferrer" className="flex-1">
-                  <Button variant="outline" className="w-full border-green-500/30 text-green-400 hover:bg-green-500/10">
-                    WhatsApp Us
-                  </Button>
+                  <Button variant="outline" className="w-full border-green-500/30 text-green-400 hover:bg-green-500/10">WhatsApp Us</Button>
                 </a>
                 <a href={mapsLink} target="_blank" rel="noopener noreferrer" className="flex-1">
-                  <Button variant="outline" className="w-full border-border text-foreground hover:bg-accent">
-                    Directions
-                  </Button>
+                  <Button variant="outline" className="w-full border-border text-foreground hover:bg-accent">Directions</Button>
                 </a>
               </div>
 
-              {/* Map */}
               <div className="rounded-xl overflow-hidden border border-border h-64 bg-card">
                 {mapsEmbed ? (
                   <iframe src={mapsEmbed} width="100%" height="100%" style={{ border: 0 }} allowFullScreen loading="lazy" title="Elparaiso Location" />
@@ -125,7 +119,6 @@ export default function ContactPage() {
               </div>
             </div>
 
-            {/* Contact Form */}
             <div className="bg-card border border-border rounded-xl p-6">
               {submitted ? (
                 <div className="flex flex-col items-center justify-center h-full text-center py-12">
@@ -145,18 +138,14 @@ export default function ContactPage() {
                         <FormField control={form.control} name="name" render={({ field }) => (
                           <FormItem>
                             <FormLabel className="text-foreground">Name *</FormLabel>
-                            <FormControl>
-                              <Input {...field} placeholder="Your name" className="bg-input border-border text-foreground placeholder:text-muted-foreground" />
-                            </FormControl>
+                            <FormControl><Input {...field} placeholder="Your name" className="bg-input border-border text-foreground placeholder:text-muted-foreground" /></FormControl>
                             <FormMessage />
                           </FormItem>
                         )} />
                         <FormField control={form.control} name="phone" render={({ field }) => (
                           <FormItem>
                             <FormLabel className="text-foreground">Phone *</FormLabel>
-                            <FormControl>
-                              <Input {...field} placeholder="07XX XXX XXX" className="bg-input border-border text-foreground placeholder:text-muted-foreground" />
-                            </FormControl>
+                            <FormControl><Input {...field} placeholder="07XX XXX XXX" className="bg-input border-border text-foreground placeholder:text-muted-foreground" /></FormControl>
                             <FormMessage />
                           </FormItem>
                         )} />
@@ -164,9 +153,7 @@ export default function ContactPage() {
                       <FormField control={form.control} name="email" render={({ field }) => (
                         <FormItem>
                           <FormLabel className="text-foreground">Email (optional)</FormLabel>
-                          <FormControl>
-                            <Input {...field} type="email" placeholder="your@email.com" className="bg-input border-border text-foreground placeholder:text-muted-foreground" />
-                          </FormControl>
+                          <FormControl><Input {...field} type="email" placeholder="your@email.com" className="bg-input border-border text-foreground placeholder:text-muted-foreground" /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )} />
@@ -175,9 +162,7 @@ export default function ContactPage() {
                           <FormLabel className="text-foreground">Inquiry Type *</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value}>
                             <FormControl>
-                              <SelectTrigger className="bg-input border-border text-foreground">
-                                <SelectValue placeholder="Select inquiry type" />
-                              </SelectTrigger>
+                              <SelectTrigger className="bg-input border-border text-foreground"><SelectValue placeholder="Select inquiry type" /></SelectTrigger>
                             </FormControl>
                             <SelectContent className="bg-popover border-border">
                               {INQUIRY_TYPES.map((t) => (
@@ -191,9 +176,7 @@ export default function ContactPage() {
                       <FormField control={form.control} name="message" render={({ field }) => (
                         <FormItem>
                           <FormLabel className="text-foreground">Message *</FormLabel>
-                          <FormControl>
-                            <Textarea {...field} placeholder="How can we help you?" rows={4} className="bg-input border-border text-foreground placeholder:text-muted-foreground resize-none" />
-                          </FormControl>
+                          <FormControl><Textarea {...field} placeholder="How can we help you?" rows={4} className="bg-input border-border text-foreground placeholder:text-muted-foreground resize-none" /></FormControl>
                           <FormMessage />
                         </FormItem>
                       )} />

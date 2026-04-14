@@ -46,7 +46,7 @@ interface ScrollRevealProps {
   delay?: number;
   duration?: number;
   once?: boolean;
-  as?: keyof JSX.IntrinsicElements;
+  as?: React.ElementType;
 }
 
 export function ScrollReveal({

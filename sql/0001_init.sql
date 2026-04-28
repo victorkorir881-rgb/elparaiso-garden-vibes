@@ -1,3 +1,13 @@
+-- ⚠️  STATUS: NEEDS HARDENING (Phase 1.1/1.2 in 00_PROJECT_PLAN.md)
+-- This file was recovered from the original schema dump.
+-- Before applying to production Supabase, audit per 01_DEVELOPER_RULES.md §2:
+--   • idempotent DDL (IF NOT EXISTS / OR REPLACE / DROP IF EXISTS)
+--   • wrap in BEGIN; ... COMMIT;
+--   • RLS enabled on every table + at least one policy
+--   • seeds use ON CONFLICT DO NOTHING
+--   • move user roles to a dedicated user_roles table (do NOT keep role on users)
+-- ----------------------------------------------------------------
+
 -- ============================================================
 -- ELPARAISO GARDEN KISII — SUPABASE SQL SCHEMA
 -- Version: 1.0.0

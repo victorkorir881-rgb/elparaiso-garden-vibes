@@ -1,1 +1,11 @@
 project_id = "gnlvmszcysogydomahbk"
+
+# Daraja does not sign callbacks and Safaricom servers don't send a JWT.
+# We rely on the unguessable CheckoutRequestID + an optional ?token=… shared
+# secret (MPESA_CALLBACK_TOKEN) instead.
+[functions.mpesa-callback]
+verify_jwt = false
+
+# Initiate is called from the browser without a logged-in user.
+[functions.mpesa-initiate]
+verify_jwt = false

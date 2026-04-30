@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { useAuth, supabase } from "@/lib/auth";
+import { siteUrl } from "@/lib/site-url";
 
 export default function AdminLogin() {
   const navigate = useNavigate();
@@ -34,7 +35,7 @@ export default function AdminLogin() {
         else toast.success("Account created! Check your email to confirm, then sign in.");
       } else {
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/reset-password`,
+          redirectTo: siteUrl("/reset-password"),
         });
         if (error) toast.error(error.message);
         else toast.success("Check your email for the reset link.");
@@ -48,7 +49,7 @@ export default function AdminLogin() {
     setSubmitting(true);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/admin` },
+      options: { redirectTo: siteUrl("/admin") },
     });
     if (error) {
       toast.error(error.message);

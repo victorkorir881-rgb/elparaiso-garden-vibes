@@ -244,5 +244,90 @@ Never expose the service role key. Never check admin status from `localStorage`.
 - ❌ Hardcode colors instead of using design tokens.
 - ❌ Push without running `bun run check && bunx vitest run && bun run build`.
 - ❌ Mark a plan task `[x]` without tests + docs updated.
+- ❌ Add a feature that violates any budget in §11 (Free-tier discipline) without an explicit, documented exemption in the PR description.
+
+---
+
+## 11. Free-Tier Discipline (Supabase Free + Vercel Hobby)
+
+The project runs on **Supabase Free** and **Vercel Hobby**. We must never trip a paid-only limit. Every feature, every PR, every migration is reviewed against the budgets below. If a feature can't fit, it doesn't ship — redesign it.
+
+### 11.1 Hard limits to respect
+
+| Platform | Limit | Our internal budget (≤ 70%) |
+|---|---|---|
+| **Supabase — Database size** | 500 MB | 350 MB |
+| **Supabase — File storage** | 1 GB | 700 MB |
+| **Supabase — Storage egress** | 5 GB / month | 3.5 GB / month |
+| **Supabase — Monthly Active Users (MAU)** | 50,000 | 35,000 |
+| **Supabase — Edge Function invocations** | 500,000 / month | 350,000 / month |
+| **Supabase — Realtime concurrent peers** | 200 | 140 |
+| **Supabase — Realtime messages** | 2,000,000 / month | 1,400,000 / month |
+| **Supabase — Project pause** | 7 days inactivity | Cron ping every 6 days (see §11.6) |
+| **Vercel — Bandwidth** | 100 GB / month | 70 GB / month |
+| **Vercel — Function invocations** | 100,000 / day | 70,000 / day |
+| **Vercel — Function execution** | 100 GB-Hrs / month | 70 GB-Hrs / month |
+| **Vercel — Function duration** | 10 s (default) | Keep all handlers ≤ 5 s |
+| **Vercel — Build minutes** | 6,000 / month | 4,000 / month |
+| **Vercel — Image Optimization** | 1,000 source images | Use external optimizer (see §11.5) |
+| **Vercel — Deployments** | 100 / day | < 30 / day |
+| **Vercel — Cron jobs** | 2 jobs, daily only | 2 jobs max, daily cadence |
+
+> ⚠️ Limits change. Re-verify against [supabase.com/pricing](https://supabase.com/pricing) and [vercel.com/docs/limits](https://vercel.com/docs/limits) each quarter and update this table.
+
+### 11.2 Database (Supabase Postgres)
+
+- **No `SELECT *`** on any table > 1k rows. Always project explicit columns.
+- **Always paginate.** Public listings: `LIMIT 24` default, `LIMIT 100` max. Admin tables: `LIMIT 50` default.
+- **Index every column used in `WHERE`, `ORDER BY`, or RLS policies.** Add the index in the same migration that introduces the query pattern.
+- **Soft-delete sparingly.** Prefer hard delete + audit log row. Keeps row count + index size down.
+- **No JSONB blobs > 10 KB.** Move large payloads to Storage and keep only the URL in the row.
+- **Vacuum / analyze**: trust autovacuum but verify with `pg_stat_user_tables` quarterly. If any table > 100 MB, consider archiving.
+- **Backups**: Free tier = no point-in-time recovery. Schema must be reproducible from `/sql/*.sql`; data must be exportable via the admin CSV export (Phase 4.5).
+
+### 11.3 Realtime
+
+- **Realtime is opt-in per feature**, never global. Default = TanStack Query polling at 30 s.
+- Subscribe only to **the rows that matter** using row filters: `filter: 'status=eq.pending'`. Never subscribe to a whole table.
+- **Unsubscribe on unmount.** Memory leaks burn the concurrent-peer budget fast.
+- Admin dashboards: max **3 concurrent channels per session**. If you need more, consolidate into a single channel.
+
+### 11.4 Edge Functions / Vercel Serverless
+
+- **Idempotent or it doesn't ship.** Every webhook + payment handler must be safe to retry.
+- **Cold-start budget**: keep bundle < 1 MB and avoid heavy npm deps (no `lodash`, no `moment`, no `aws-sdk`). Use native `fetch`, `Date`, `Intl`.
+- **Streaming where possible** (LLM responses, large CSV exports) to keep within the 10-s function duration cap.
+- **Never call a function from a render path.** All function calls go through TanStack Query mutations, never inside a component body.
+- **Rate-limit user-facing endpoints** (login, signup, contact form, reservation, OTP send): max 5 req / IP / minute, enforced server-side via the `rate_limit` table (Phase 5.5).
+
+### 11.5 Storage, Images & Bandwidth
+
+- **No raw camera uploads.** Resize client-side to max 1920 px on the longest edge before upload.
+- **Always store WebP (or AVIF) + a thumbnail variant** (≤ 400 px). Pipeline lives in Phase 4.6.
+- **No more than 200 KB per gallery image, 80 KB per thumbnail.** Reject larger uploads at the API layer.
+- **Lazy-load every image** below the fold (`loading="lazy"` + `decoding="async"`).
+- **Do NOT use Vercel Image Optimization** (`next/image`-style) — we're on Vite + Hobby and the 1k source-image cap will trip on a busy gallery. Optimize at upload time and serve static URLs from Supabase Storage.
+- **Hot-link CDN-friendly assets only.** Cache headers on Storage buckets: `max-age=31536000, immutable` for hashed filenames.
+
+### 11.6 Keep-alive & monitoring
+
+- **Supabase pause guard**: a single Vercel Cron job runs daily at 03:00 UTC and pings `/api/health` (which selects `1` from Postgres). Resets the 7-day inactivity clock and serves as uptime proof.
+- **Budget alerts**: Vercel + Supabase usage alerts must be wired to email at 60% and 80% of every metric in §11.1. Configure during Phase 9.3.
+- **Per-PR check**: every PR description includes a one-line "Budget impact" note (e.g. "Adds 1 daily cron, +0 functions, est. +50 KB DB / day"). Reviewers reject PRs without it.
+
+### 11.7 Frontend bandwidth
+
+- **Bundle budget**: public JS ≤ 200 KB gzipped per route, admin ≤ 350 KB gzipped per route. Enforced by `vite-bundle-visualizer` check before merge.
+- **Code-split admin from public** (Phase 8.2). Public users must never download admin bundles.
+- **No client-side polling faster than 30 s** unless explicitly justified. Use Realtime or on-demand refetch instead.
+- **Self-host fonts** via `fonts.googleapis.com` only with `display=swap`; consider `fontsource` + local files if Google Fonts ever shows up in our top egress sources.
+
+### 11.8 Domains, deploys & redirects
+
+- **One production deployment** on Vercel (the `main` branch). Preview deploys are fine but never linked from the live site.
+- **No automatic redeploy loops.** Disable any GitHub bot that pushes commits on its own (e.g. dependency bots set to "auto-merge + auto-rebase").
+- **Vercel cron jobs**: hard cap of **2** (Hobby limit). Currently allocated: (1) Supabase keep-alive, (2) reserved for future scheduled tasks. Adding a third = redesign needed.
+- **Custom domain DNS lives at the registrar**, not Vercel — we keep the option to switch hosts cheaply.
 
 When in doubt: re-read this file, then ask in PR comments.
+

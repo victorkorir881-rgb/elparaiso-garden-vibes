@@ -1,12 +1,10 @@
 import { createContext, useContext, useEffect, useState, useCallback, useMemo, type ReactNode } from "react";
-import { createClient, type User, type Session } from "@supabase/supabase-js";
+import { type User, type Session } from "@supabase/supabase-js";
+import { supabase } from "@/integrations/supabase/client";
+import { siteUrl } from "@/lib/site-url";
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+export { supabase };
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: { storage: localStorage, persistSession: true, autoRefreshToken: true },
-});
 
 type AdminUser = {
   id: string;
@@ -111,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password,
       options: {
         data: { full_name: fullName },
-        emailRedirectTo: "https://elparaisogardens.vercel.app/admin/login",
+        emailRedirectTo: siteUrl("/admin/login"),
       },
     });
     if (error) return { error: error.message };

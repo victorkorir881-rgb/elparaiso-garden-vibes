@@ -1,5 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useMenuCategories, useMenuItems, useCreateOrder } from "@/lib/supabase-hooks";
+import { useInitiateMpesaPayment, usePaymentStatus } from "@/lib/payments";
 import { useCart } from "@/contexts/CartContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +8,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, ShoppingCart, Trash2, Plus, Minus, Check } from "lucide-react";
+import { Loader2, ShoppingCart, Trash2, Plus, Minus, Check, Home, UtensilsCrossed, MapPin, CalendarDays, Phone, Smartphone, X } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 
 export default function OrderPage() {
@@ -26,6 +28,29 @@ export default function OrderPage() {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [orderNumber, setOrderNumber] = useState("");
+  // Payment state
+  const [paymentId, setPaymentId] = useState<string | null>(null);
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
+
+  const initiatePayment = useInitiateMpesaPayment();
+  const { data: paymentRow } = usePaymentStatus(paymentId);
+
+  // React to payment status changes
+  useEffect(() => {
+    if (!paymentRow) return;
+    if (paymentRow.status === "success") {
+      toast.success(`Payment received${paymentRow.mpesa_receipt_number ? ` (${paymentRow.mpesa_receipt_number})` : ""}!`);
+      setOrderPlaced(true);
+      setPaymentOpen(false);
+      clearCart();
+      setIsCheckingOut(false);
+    } else if (paymentRow.status === "failed" || paymentRow.status === "cancelled" || paymentRow.status === "timeout") {
+      toast.error(paymentRow.result_desc ?? `Payment ${paymentRow.status}. Please try again.`);
+      setIsCheckingOut(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentRow?.status]);
 
   const createOrder = useCreateOrder();
 
@@ -59,46 +84,79 @@ export default function OrderPage() {
 
     setIsCheckingOut(true);
     const ordNum = generateOrderNumber();
+    const amountKes = Math.round(parseFloat(total));
 
-    createOrder.mutate({
-      order_number: ordNum,
-      customer_name: customerName,
-      customer_phone: customerPhone,
-      customer_email: customerEmail || undefined,
-      items: items.map((item) => ({ id: item.id, name: item.name, price: item.price, quantity: item.quantity })),
-      total_amount: parseFloat(total),
-      order_type: orderType,
-      delivery_address: orderType === "delivery" ? deliveryAddress : undefined,
-      special_instructions: specialInstructions || undefined,
-      estimated_time: 30,
-    }, {
-      onSuccess: () => {
-        setOrderNumber(ordNum);
-        setOrderPlaced(true);
-        clearCart();
-        toast.success("Order placed successfully!");
+    createOrder.mutate(
+      {
+        order_number: ordNum,
+        customer_name: customerName,
+        customer_phone: customerPhone,
+        customer_email: customerEmail || undefined,
+        items: items.map((item) => ({ id: item.id, name: item.name, price: item.price, quantity: item.quantity })),
+        total_amount: parseFloat(total),
+        order_type: orderType,
+        delivery_address: orderType === "delivery" ? deliveryAddress : undefined,
+        special_instructions: specialInstructions || undefined,
+        estimated_time: 30,
+        payment_method: "mpesa",
       },
-      onError: () => {
-        toast.error("Failed to place order. Please try again.");
-        setIsCheckingOut(false);
+      {
+        onSuccess: (created: any) => {
+          setOrderNumber(ordNum);
+          setPendingOrderId(created.id);
+          // Trigger STK Push immediately
+          initiatePayment.mutate(
+            { orderId: created.id, phone: customerPhone, amount: amountKes },
+            {
+              onSuccess: (res) => {
+                setPaymentId(res.paymentId);
+                setPaymentOpen(true);
+                toast.success(res.message);
+              },
+              onError: (err) => {
+                toast.error(err.message ?? "Failed to start M-Pesa payment");
+                setIsCheckingOut(false);
+              },
+            },
+          );
+        },
+        onError: () => {
+          toast.error("Failed to place order. Please try again.");
+          setIsCheckingOut(false);
+        },
       },
-    });
+    );
+  };
+
+  const handleRetryPayment = () => {
+    if (!pendingOrderId) return;
+    const amountKes = Math.round(parseFloat(total) || (paymentRow as any)?.amount || 0);
+    initiatePayment.mutate(
+      { orderId: pendingOrderId, phone: customerPhone, amount: amountKes },
+      {
+        onSuccess: (res) => {
+          setPaymentId(res.paymentId);
+          toast.success(res.message);
+        },
+        onError: (err) => toast.error(err.message ?? "Failed to retry payment"),
+      },
+    );
   };
 
   if (orderPlaced) {
     return (
-      <div className="min-h-screen bg-background py-12 px-4">
+      <div className="min-h-screen bg-background py-8 sm:py-12 px-3 sm:px-4">
         <div className="max-w-2xl mx-auto text-center">
           <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <Check className="w-8 h-8 text-green-600" />
           </div>
-          <h1 className="text-4xl font-bold font-display mb-4">Order Placed Successfully!</h1>
+          <h1 className="text-3xl sm:text-4xl font-bold font-display mb-4">Order Placed Successfully!</h1>
           <p className="text-foreground/60 mb-8">Your order has been received and is being prepared.</p>
-          <Card className="p-8 mb-8 bg-muted">
+          <Card className="p-6 sm:p-8 mb-8 bg-muted">
             <div className="space-y-4">
               <div>
                 <p className="text-sm text-foreground/60 mb-1">Order Number</p>
-                <p className="text-2xl font-bold font-display text-primary">{orderNumber}</p>
+                <p className="text-xl sm:text-2xl font-bold font-display text-primary break-all">{orderNumber}</p>
               </div>
               <div>
                 <p className="text-sm text-foreground/60 mb-1">Estimated Time</p>
@@ -107,10 +165,15 @@ export default function OrderPage() {
             </div>
           </Card>
           <div className="space-y-3">
-            <a href="/track" className="inline-block"><Button>Track Your Order</Button></a>
+            <Link to="/track" className="inline-block"><Button>Track Your Order</Button></Link>
+            <div className="flex flex-wrap justify-center gap-2 pt-2">
+              <Link to="/"><Button variant="outline" size="sm"><Home className="w-4 h-4 mr-1.5" />Home</Button></Link>
+              <Link to="/menu"><Button variant="outline" size="sm"><UtensilsCrossed className="w-4 h-4 mr-1.5" />Menu</Button></Link>
+              <Link to="/reservations"><Button variant="outline" size="sm"><CalendarDays className="w-4 h-4 mr-1.5" />Reserve</Button></Link>
+            </div>
             <div className="pt-4 border-t border-border">
               <p className="text-sm text-foreground/60 mb-3">Need help?</p>
-              <div className="flex gap-4 justify-center">
+              <div className="flex flex-wrap gap-4 justify-center">
                 <a href="tel:0791224513" className="text-primary hover:underline text-sm font-medium">📞 Call: 0791 224513</a>
                 <a href="https://wa.me/254791224513" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline text-sm font-medium">💬 WhatsApp</a>
               </div>
@@ -122,16 +185,25 @@ export default function OrderPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background py-12 px-4">
+    <div className="min-h-screen bg-background py-6 sm:py-12 px-3 sm:px-4">
       <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold font-display mb-2">Place Your Order</h1>
-          <p className="text-foreground/60">Browse our menu and place your order for delivery or pickup</p>
+        {/* Page navigation buttons */}
+        <nav aria-label="Order page navigation" className="mb-6 flex flex-wrap gap-2">
+          <Link to="/"><Button variant="outline" size="sm"><Home className="w-4 h-4 mr-1.5" />Home</Button></Link>
+          <Link to="/menu"><Button variant="outline" size="sm"><UtensilsCrossed className="w-4 h-4 mr-1.5" />Menu</Button></Link>
+          <Link to="/track"><Button variant="outline" size="sm"><MapPin className="w-4 h-4 mr-1.5" />Track Order</Button></Link>
+          <Link to="/reservations"><Button variant="outline" size="sm"><CalendarDays className="w-4 h-4 mr-1.5" />Reserve a Table</Button></Link>
+          <a href="tel:0791224513"><Button variant="outline" size="sm"><Phone className="w-4 h-4 mr-1.5" />Call</Button></a>
+        </nav>
+
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-3xl sm:text-4xl font-bold font-display mb-2">Place Your Order</h1>
+          <p className="text-foreground/60 text-sm sm:text-base">Browse our menu and place your order for delivery or pickup</p>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-8">
+        <div className="grid lg:grid-cols-3 gap-6 lg:gap-8">
           <div className="lg:col-span-2 space-y-6">
-            <Card className="p-4">
+            <Card className="p-3 sm:p-4">
               <div className="flex gap-2 flex-wrap">
                 <Button variant={selectedCategory === null ? "default" : "outline"} onClick={() => setSelectedCategory(null)} size="sm">All Items</Button>
                 {categories.map((cat: any) => (
@@ -140,7 +212,7 @@ export default function OrderPage() {
               </div>
             </Card>
 
-            <div className="grid md:grid-cols-2 gap-4">
+            <div className="grid sm:grid-cols-2 gap-4 stagger">
               {filteredItems.map((item: any) => (
                 <Card key={item.id} className="overflow-hidden hover:border-primary/50 transition-colors">
                   {item.image_url && (
@@ -165,7 +237,7 @@ export default function OrderPage() {
           </div>
 
           <div className="lg:col-span-1">
-            <div className="sticky top-4 space-y-6">
+            <div className="lg:sticky lg:top-24 space-y-6">
               <Card className="p-4 border-2 border-primary/20">
                 <div className="flex items-center gap-2 mb-4">
                   <ShoppingCart className="w-5 h-5" />
@@ -253,6 +325,59 @@ export default function OrderPage() {
           </div>
         </div>
       </div>
+
+      {/* M-Pesa Payment Modal */}
+      {paymentOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true">
+          <Card className="w-full max-w-md p-6 relative">
+            <button
+              type="button"
+              onClick={() => { setPaymentOpen(false); setIsCheckingOut(false); }}
+              className="absolute top-3 right-3 text-foreground/50 hover:text-foreground"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div className="text-center">
+              <div className="w-14 h-14 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Smartphone className="w-7 h-7 text-primary" />
+              </div>
+              <h2 className="text-xl font-bold font-display mb-2">Confirm M-Pesa Payment</h2>
+              <p className="text-sm text-foreground/60 mb-4">
+                A prompt has been sent to <span className="font-medium text-foreground">{customerPhone}</span>.
+                Enter your M-Pesa PIN to pay <span className="font-semibold text-primary">KES {parseFloat(total).toLocaleString()}</span>.
+              </p>
+
+              {(!paymentRow || paymentRow.status === "pending") && (
+                <div className="flex items-center justify-center gap-2 py-4 text-foreground/70">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span className="text-sm">Waiting for confirmation…</span>
+                </div>
+              )}
+
+              {paymentRow?.status === "success" && (
+                <p className="text-green-600 font-medium py-4">Payment received!</p>
+              )}
+
+              {paymentRow && ["failed", "cancelled", "timeout"].includes(paymentRow.status) && (
+                <div className="py-4 space-y-3">
+                  <p className="text-destructive text-sm">
+                    {paymentRow.result_desc ?? `Payment ${paymentRow.status}.`}
+                  </p>
+                  <Button onClick={handleRetryPayment} className="w-full">
+                    <Smartphone className="w-4 h-4 mr-2" /> Retry Payment
+                  </Button>
+                </div>
+              )}
+
+              <p className="text-xs text-foreground/50 mt-4">
+                Order number: <span className="font-mono">{orderNumber}</span>
+              </p>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
+

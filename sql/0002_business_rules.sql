@@ -1,717 +1,472 @@
--- ⚠️  STATUS: NEEDS HARDENING (Phase 1.1/1.2 in 00_PROJECT_PLAN.md)
--- This file was recovered from the original schema dump.
--- Before applying to production Supabase, audit per 01_DEVELOPER_RULES.md §2:
---   • idempotent DDL (IF NOT EXISTS / OR REPLACE / DROP IF EXISTS)
---   • wrap in BEGIN; ... COMMIT;
---   • RLS enabled on every table + at least one policy
---   • seeds use ON CONFLICT DO NOTHING
---   • move user roles to a dedicated user_roles table (do NOT keep role on users)
--- ----------------------------------------------------------------
-
 -- ============================================================================
--- BUSINESS RULES ENFORCEMENT SCHEMA
--- ============================================================================
--- This SQL file extends the main schema with business rules tables, triggers,
--- and constraints to enforce all business logic at the database level.
--- Run this AFTER the main DATABASE.sql file.
+-- 0002_business_rules.sql — Postgres-native business rules layer
+-- ----------------------------------------------------------------------------
+-- Replaces the legacy MySQL file (kept as 0002_business_rules.sql.mysql.bak).
 --
--- Database: MySQL 8.0+ or MariaDB 10.5+
--- Created: April 2026
+-- Implements:
+--   * Order status transition validation (trigger)
+--   * Payment-required-before-completion guard (trigger)
+--   * Coupons + applied-coupon validation
+--   * Loyalty points (auto-earned on order completion)
+--   * Inventory tracking on menu_items + auto-disable on out-of-stock
+--   * Holidays table (informational; consumed by the booking app)
+--   * Notifications table (low-stock, out-of-stock, etc.)
+--   * Business-rule audit log on site_settings changes
+--
+-- All triggers are PL/pgSQL; all tables are RLS-enabled with admin-only access.
+-- Idempotent and transactional. Safe to re-run.
 -- ============================================================================
 
--- ============================================================================
--- BUSINESS RULES AUDIT TABLE
--- ============================================================================
-CREATE TABLE IF NOT EXISTS `business_rules_audit` (
-  `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  `ruleKey` VARCHAR(128) NOT NULL,
-  `oldValue` TEXT,
-  `newValue` TEXT,
-  `changedBy` INT,
-  `changedAt` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (changedBy) REFERENCES users(id) ON DELETE SET NULL,
-  INDEX idx_ruleKey (ruleKey),
-  INDEX idx_changedAt (changedAt)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+BEGIN;
 
 -- ============================================================================
--- VALID ORDER STATUS TRANSITIONS TABLE
+-- 1. VALID ORDER STATUS TRANSITIONS
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS `valid_status_transitions` (
-  `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  `fromStatus` ENUM('pending', 'preparing', 'ready', 'out-for-delivery', 'completed', 'cancelled') NOT NULL,
-  `toStatus` ENUM('pending', 'preparing', 'ready', 'out-for-delivery', 'completed', 'cancelled') NOT NULL,
-  UNIQUE KEY unique_transition (fromStatus, toStatus)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS public.valid_status_transitions (
+  id           serial PRIMARY KEY,
+  from_status  text NOT NULL,
+  to_status    text NOT NULL,
+  UNIQUE (from_status, to_status)
+);
 
--- Insert valid order status transitions
-INSERT IGNORE INTO `valid_status_transitions` (fromStatus, toStatus) VALUES
-('pending', 'preparing'),
-('pending', 'cancelled'),
-('preparing', 'ready'),
-('preparing', 'cancelled'),
-('ready', 'out-for-delivery'),
-('ready', 'completed'),
-('ready', 'cancelled'),
-('out-for-delivery', 'completed'),
-('out-for-delivery', 'cancelled');
-
--- ============================================================================
--- ROLE PERMISSIONS TABLE
--- ============================================================================
-CREATE TABLE IF NOT EXISTS `role_permissions` (
-  `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  `role` ENUM('user', 'admin', 'manager', 'editor') NOT NULL,
-  `permission` VARCHAR(100) NOT NULL,
-  UNIQUE KEY unique_role_permission (role, permission)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- Insert role-based permissions
-INSERT IGNORE INTO `role_permissions` (role, permission) VALUES
--- Admin: Full access
-('admin', 'manage_all'),
-('admin', 'manage_users'),
-('admin', 'manage_settings'),
-('admin', 'manage_business_rules'),
-('admin', 'view_analytics'),
-('admin', 'view_audit_logs'),
-
--- Manager: Operational management
-('manager', 'manage_orders'),
-('manager', 'manage_reservations'),
-('manager', 'manage_events'),
-('manager', 'manage_testimonials'),
-('manager', 'view_messages'),
-('manager', 'manage_gallery'),
-
--- Editor: Content management
-('editor', 'manage_menu'),
-('editor', 'manage_gallery'),
-('editor', 'manage_events'),
-('editor', 'manage_testimonials'),
-
--- User: Read-only access
-('user', 'view_public');
+INSERT INTO public.valid_status_transitions (from_status, to_status) VALUES
+  ('pending',          'preparing'),
+  ('pending',          'cancelled'),
+  ('preparing',        'ready'),
+  ('preparing',        'cancelled'),
+  ('ready',            'out-for-delivery'),
+  ('ready',            'completed'),
+  ('ready',            'cancelled'),
+  ('out-for-delivery', 'completed'),
+  ('out-for-delivery', 'cancelled')
+ON CONFLICT (from_status, to_status) DO NOTHING;
 
 -- ============================================================================
--- COUPONS TABLE FOR PROMOTIONAL RULES
+-- 2. ROLE → PERMISSIONS MAP (informational; enforcement is via has_admin_role)
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS `coupons` (
-  `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  `code` VARCHAR(50) NOT NULL UNIQUE,
-  `description` TEXT,
-  `discountType` ENUM('percentage', 'fixed') NOT NULL DEFAULT 'percentage',
-  `discountValue` DECIMAL(10, 2) NOT NULL,
-  `validFrom` DATE NOT NULL,
-  `validTo` DATE NOT NULL,
-  `maxUses` INT,
-  `usedCount` INT DEFAULT 0,
-  `minOrderValue` DECIMAL(10, 2) DEFAULT 0,
-  `applicableCategories` JSON,
-  `isActive` BOOLEAN DEFAULT TRUE,
-  `createdAt` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updatedAt` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_code (code),
-  INDEX idx_isActive (isActive),
-  INDEX idx_validFrom (validFrom),
-  INDEX idx_validTo (validTo)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS public.role_permissions (
+  id          serial PRIMARY KEY,
+  role        public.admin_role NOT NULL,
+  permission  text NOT NULL,
+  UNIQUE (role, permission)
+);
+
+INSERT INTO public.role_permissions (role, permission) VALUES
+  ('super_admin', 'manage_all'),
+  ('super_admin', 'manage_users'),
+  ('super_admin', 'manage_settings'),
+  ('super_admin', 'manage_business_rules'),
+  ('super_admin', 'view_analytics'),
+  ('super_admin', 'view_audit_logs'),
+  ('admin',       'manage_orders'),
+  ('admin',       'manage_reservations'),
+  ('admin',       'manage_events'),
+  ('admin',       'manage_testimonials'),
+  ('admin',       'manage_menu'),
+  ('admin',       'manage_gallery'),
+  ('admin',       'view_messages'),
+  ('admin',       'view_analytics'),
+  ('manager',     'manage_orders'),
+  ('manager',     'manage_reservations'),
+  ('manager',     'manage_events'),
+  ('manager',     'manage_gallery'),
+  ('manager',     'view_messages'),
+  ('staff',       'view_orders'),
+  ('staff',       'view_reservations')
+ON CONFLICT (role, permission) DO NOTHING;
 
 -- ============================================================================
--- HOLIDAYS TABLE FOR OPERATING HOURS RULES
+-- 3. COUPONS
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS `holidays` (
-  `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  `name` VARCHAR(255) NOT NULL,
-  `date` DATE NOT NULL UNIQUE,
-  `isClosed` BOOLEAN DEFAULT TRUE,
-  `specialHours` JSON,
-  `notes` TEXT,
-  `createdAt` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_date (date),
-  INDEX idx_isClosed (isClosed)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS public.coupons (
+  id                     uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  code                   text NOT NULL UNIQUE,
+  description            text,
+  discount_type          text NOT NULL DEFAULT 'percentage' CHECK (discount_type IN ('percentage','fixed')),
+  discount_value         numeric(10,2) NOT NULL CHECK (discount_value > 0),
+  valid_from             date NOT NULL,
+  valid_to               date NOT NULL,
+  max_uses               integer,
+  used_count             integer NOT NULL DEFAULT 0,
+  min_order_value        numeric(10,2) NOT NULL DEFAULT 0 CHECK (min_order_value >= 0),
+  applicable_categories  jsonb,
+  is_active              boolean NOT NULL DEFAULT true,
+  created_at             timestamptz NOT NULL DEFAULT now(),
+  updated_at             timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT coupons_date_range_chk CHECK (valid_from <= valid_to),
+  CONSTRAINT coupons_uses_chk       CHECK (max_uses IS NULL OR used_count <= max_uses)
+);
+CREATE INDEX IF NOT EXISTS idx_coupons_code   ON public.coupons(code);
+CREATE INDEX IF NOT EXISTS idx_coupons_active ON public.coupons(is_active);
+
+-- Add an optional coupon code on orders (idempotent column add)
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS coupon_code text;
 
 -- ============================================================================
--- CUSTOMER PREFERENCES TABLE FOR COMMUNICATION RULES
+-- 4. HOLIDAYS
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS `customer_preferences` (
-  `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  `phone` VARCHAR(20) NOT NULL UNIQUE,
-  `email` VARCHAR(320),
-  `whatsappOptIn` BOOLEAN DEFAULT TRUE,
-  `emailOptIn` BOOLEAN DEFAULT TRUE,
-  `smsOptIn` BOOLEAN DEFAULT FALSE,
-  `preferredLanguage` VARCHAR(10) DEFAULT 'en',
-  `createdAt` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updatedAt` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  INDEX idx_phone (phone)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS public.holidays (
+  id             serial PRIMARY KEY,
+  name           text NOT NULL,
+  date           date NOT NULL UNIQUE,
+  is_closed      boolean NOT NULL DEFAULT true,
+  special_hours  jsonb,
+  notes          text,
+  created_at     timestamptz NOT NULL DEFAULT now()
+);
 
 -- ============================================================================
--- LOYALTY POINTS TABLE FOR REWARDS RULES
+-- 5. INVENTORY (extends menu_items)
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS `loyalty_points` (
-  `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  `phone` VARCHAR(20) NOT NULL,
-  `points` INT DEFAULT 0,
-  `totalSpent` DECIMAL(10, 2) DEFAULT 0,
-  `totalOrders` INT DEFAULT 0,
-  `lastOrderDate` DATETIME,
-  `createdAt` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updatedAt` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  UNIQUE KEY unique_phone (phone),
-  INDEX idx_points (points)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+ALTER TABLE public.menu_items
+  ADD COLUMN IF NOT EXISTS quantity              integer NOT NULL DEFAULT 999,
+  ADD COLUMN IF NOT EXISTS low_stock_threshold   integer NOT NULL DEFAULT 10,
+  ADD COLUMN IF NOT EXISTS reorder_quantity      integer NOT NULL DEFAULT 50;
 
--- ============================================================================
--- LOYALTY TRANSACTIONS TABLE
--- ============================================================================
-CREATE TABLE IF NOT EXISTS `loyalty_transactions` (
-  `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  `phone` VARCHAR(20) NOT NULL,
-  `points` INT NOT NULL,
-  `type` ENUM('earn', 'redeem') NOT NULL,
-  `orderId` INT,
-  `description` TEXT,
-  `createdAt` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (orderId) REFERENCES orders(id) ON DELETE SET NULL,
-  INDEX idx_phone (phone),
-  INDEX idx_type (type)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ============================================================================
--- INVENTORY TRACKING TABLE
--- ============================================================================
-ALTER TABLE `menu_items` ADD COLUMN IF NOT EXISTS `quantity` INT DEFAULT 999;
-ALTER TABLE `menu_items` ADD COLUMN IF NOT EXISTS `lowStockThreshold` INT DEFAULT 10;
-ALTER TABLE `menu_items` ADD COLUMN IF NOT EXISTS `reorderQuantity` INT DEFAULT 50;
-
--- ============================================================================
--- INVENTORY TRANSACTIONS TABLE
--- ============================================================================
-CREATE TABLE IF NOT EXISTS `inventory_transactions` (
-  `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  `menuItemId` INT NOT NULL,
-  `quantity` INT NOT NULL,
-  `type` ENUM('sale', 'restock', 'adjustment', 'damage') NOT NULL,
-  `orderId` INT,
-  `notes` TEXT,
-  `recordedBy` INT,
-  `createdAt` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (menuItemId) REFERENCES menu_items(id) ON DELETE CASCADE,
-  FOREIGN KEY (orderId) REFERENCES orders(id) ON DELETE SET NULL,
-  FOREIGN KEY (recordedBy) REFERENCES users(id) ON DELETE SET NULL,
-  INDEX idx_menuItemId (menuItemId),
-  INDEX idx_type (type),
-  INDEX idx_createdAt (createdAt)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ============================================================================
--- NOTIFICATIONS TABLE FOR SYSTEM ALERTS
--- ============================================================================
-CREATE TABLE IF NOT EXISTS `notifications` (
-  `id` INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
-  `type` VARCHAR(50) NOT NULL,
-  `title` VARCHAR(255) NOT NULL,
-  `message` TEXT,
-  `relatedEntityType` VARCHAR(50),
-  `relatedEntityId` INT,
-  `isRead` BOOLEAN DEFAULT FALSE,
-  `createdAt` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_type (type),
-  INDEX idx_isRead (isRead),
-  INDEX idx_createdAt (createdAt)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ============================================================================
--- CONSTRAINTS FOR BUSINESS RULES
--- ============================================================================
-
--- Menu items: Price validation
-ALTER TABLE `menu_items` ADD CONSTRAINT check_price CHECK (price >= 0);
-
--- Menu items: Sort order validation
-ALTER TABLE `menu_items` ADD CONSTRAINT check_sort_order CHECK (sortOrder >= 0);
-
--- Reservations: Party size validation (will be enforced in backend)
--- ALTER TABLE `reservations` ADD CONSTRAINT check_party_size CHECK (partySize > 0);
-
--- Orders: Total amount validation
-ALTER TABLE `orders` ADD CONSTRAINT check_order_total CHECK (totalAmount >= 0);
-
--- Coupons: Discount value validation
-ALTER TABLE `coupons` ADD CONSTRAINT check_discount_value CHECK (discountValue > 0);
-ALTER TABLE `coupons` ADD CONSTRAINT check_coupon_dates CHECK (validFrom <= validTo);
-ALTER TABLE `coupons` ADD CONSTRAINT check_coupon_uses CHECK (usedCount <= maxUses OR maxUses IS NULL);
-
--- Loyalty points: Non-negative points
-ALTER TABLE `loyalty_points` ADD CONSTRAINT check_points CHECK (points >= 0);
-ALTER TABLE `loyalty_points` ADD CONSTRAINT check_total_spent CHECK (totalSpent >= 0);
-
--- Inventory: Non-negative quantities
-ALTER TABLE `menu_items` ADD CONSTRAINT check_quantity CHECK (quantity >= 0);
-ALTER TABLE `inventory_transactions` ADD CONSTRAINT check_inventory_qty CHECK (quantity != 0);
-
--- ============================================================================
--- TRIGGERS FOR BUSINESS RULES ENFORCEMENT
--- ============================================================================
-
--- TRIGGER 1: Validate order status transitions
-DELIMITER $$
-CREATE TRIGGER validate_order_status_transition
-BEFORE UPDATE ON orders
-FOR EACH ROW
+DO $$
 BEGIN
-  IF NEW.status != OLD.status THEN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'menu_items_quantity_chk'
+  ) THEN
+    ALTER TABLE public.menu_items
+      ADD CONSTRAINT menu_items_quantity_chk CHECK (quantity >= 0);
+  END IF;
+END$$;
+
+CREATE TABLE IF NOT EXISTS public.inventory_transactions (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  menu_item_id  text NOT NULL REFERENCES public.menu_items(id) ON DELETE CASCADE,
+  quantity      integer NOT NULL CHECK (quantity <> 0),
+  type          text NOT NULL CHECK (type IN ('sale','restock','adjustment','damage')),
+  order_id      uuid REFERENCES public.orders(id) ON DELETE SET NULL,
+  notes         text,
+  recorded_by   uuid,
+  created_at    timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_inv_tx_menu_item ON public.inventory_transactions(menu_item_id);
+CREATE INDEX IF NOT EXISTS idx_inv_tx_type      ON public.inventory_transactions(type);
+
+-- ============================================================================
+-- 6. LOYALTY
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS public.loyalty_points (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  phone           text NOT NULL UNIQUE,
+  points          integer NOT NULL DEFAULT 0 CHECK (points >= 0),
+  total_spent     numeric(10,2) NOT NULL DEFAULT 0 CHECK (total_spent >= 0),
+  total_orders    integer NOT NULL DEFAULT 0,
+  last_order_date timestamptz,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.loyalty_transactions (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  phone        text NOT NULL,
+  points       integer NOT NULL,
+  type         text NOT NULL CHECK (type IN ('earn','redeem')),
+  order_id     uuid REFERENCES public.orders(id) ON DELETE SET NULL,
+  description  text,
+  created_at   timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_loyalty_tx_phone ON public.loyalty_transactions(phone);
+
+-- ============================================================================
+-- 7. NOTIFICATIONS
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS public.notifications (
+  id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  type                text NOT NULL,
+  title               text NOT NULL,
+  message             text,
+  related_entity_type text,
+  related_entity_id   text,
+  is_read             boolean NOT NULL DEFAULT false,
+  created_at          timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_unread ON public.notifications(is_read);
+CREATE INDEX IF NOT EXISTS idx_notifications_type   ON public.notifications(type);
+
+-- ============================================================================
+-- 8. BUSINESS RULES AUDIT
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS public.business_rules_audit (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  rule_key    text NOT NULL,
+  old_value   text,
+  new_value   text,
+  changed_by  uuid,
+  changed_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_audit_rule_key ON public.business_rules_audit(rule_key);
+
+-- ============================================================================
+-- 9. updated_at triggers for the new tables
+-- ============================================================================
+DO $$
+DECLARE
+  t text;
+  tables text[] := ARRAY['coupons','loyalty_points'];
+BEGIN
+  FOREACH t IN ARRAY tables LOOP
+    EXECUTE format('DROP TRIGGER IF EXISTS trg_%I_updated_at ON public.%I', t, t);
+    EXECUTE format(
+      'CREATE TRIGGER trg_%I_updated_at BEFORE UPDATE ON public.%I
+         FOR EACH ROW EXECUTE FUNCTION public.set_updated_at()',
+      t, t
+    );
+  END LOOP;
+END$$;
+
+-- ============================================================================
+-- 10. TRIGGER: validate order status transitions
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.fn_validate_order_status_transition()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.status IS DISTINCT FROM OLD.status THEN
     IF NOT EXISTS (
-      SELECT 1 FROM valid_status_transitions 
-      WHERE fromStatus = OLD.status AND toStatus = NEW.status
+      SELECT 1 FROM public.valid_status_transitions
+      WHERE from_status = OLD.status AND to_status = NEW.status
     ) THEN
-      SIGNAL SQLSTATE '45000' 
-      SET MESSAGE_TEXT = CONCAT('Invalid status transition from ', OLD.status, ' to ', NEW.status);
+      RAISE EXCEPTION 'Invalid order status transition from % to %', OLD.status, NEW.status
+        USING ERRCODE = 'check_violation';
     END IF;
   END IF;
-END$$
-DELIMITER ;
+  RETURN NEW;
+END;
+$$;
 
--- TRIGGER 2: Validate payment before order completion
-DELIMITER $$
-CREATE TRIGGER validate_payment_before_completion
-BEFORE UPDATE ON orders
-FOR EACH ROW
+DROP TRIGGER IF EXISTS trg_orders_validate_status ON public.orders;
+CREATE TRIGGER trg_orders_validate_status
+  BEFORE UPDATE OF status ON public.orders
+  FOR EACH ROW EXECUTE FUNCTION public.fn_validate_order_status_transition();
+
+-- ============================================================================
+-- 11. TRIGGER: payment must be paid before order can be completed
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.fn_validate_payment_before_completion()
+RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  IF NEW.status = 'completed' AND NEW.paymentStatus != 'paid' THEN
-    SIGNAL SQLSTATE '45000' 
-    SET MESSAGE_TEXT = 'Payment required before marking order as completed';
+  IF NEW.status = 'completed' AND NEW.payment_status <> 'paid' THEN
+    RAISE EXCEPTION 'Payment required before marking order as completed'
+      USING ERRCODE = 'check_violation';
   END IF;
-END$$
-DELIMITER ;
+  RETURN NEW;
+END;
+$$;
 
--- TRIGGER 3: Auto-disable menu items when out of stock
-DELIMITER $$
-CREATE TRIGGER auto_disable_out_of_stock
-AFTER UPDATE ON menu_items
-FOR EACH ROW
-BEGIN
-  IF NEW.quantity <= 0 AND OLD.isAvailable = TRUE THEN
-    UPDATE menu_items SET isAvailable = FALSE WHERE id = NEW.id;
-    INSERT INTO notifications (type, title, message) 
-    VALUES ('out_of_stock', CONCAT(NEW.name, ' is out of stock'), 
-            CONCAT('Menu item ', NEW.name, ' has been automatically disabled'));
-  END IF;
-END$$
-DELIMITER ;
+DROP TRIGGER IF EXISTS trg_orders_validate_payment ON public.orders;
+CREATE TRIGGER trg_orders_validate_payment
+  BEFORE UPDATE ON public.orders
+  FOR EACH ROW EXECUTE FUNCTION public.fn_validate_payment_before_completion();
 
--- TRIGGER 4: Alert when inventory is low
-DELIMITER $$
-CREATE TRIGGER alert_low_stock
-AFTER UPDATE ON menu_items
-FOR EACH ROW
+-- ============================================================================
+-- 12. TRIGGER: validate coupon when used on insert
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.fn_validate_coupon_usage()
+RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  IF NEW.quantity <= NEW.lowStockThreshold AND OLD.quantity > NEW.lowStockThreshold THEN
-    INSERT INTO notifications (type, title, message) 
-    VALUES ('low_stock', CONCAT(NEW.name, ' low stock'), 
-            CONCAT(NEW.name, ' is below reorder threshold (', NEW.lowStockThreshold, ' units)'));
-  END IF;
-END$$
-DELIMITER ;
-
--- TRIGGER 5: Log business rule changes
-DELIMITER $$
-CREATE TRIGGER log_business_rule_changes
-AFTER UPDATE ON site_settings
-FOR EACH ROW
-BEGIN
-  IF OLD.value != NEW.value THEN
-    INSERT INTO business_rules_audit (ruleKey, oldValue, newValue) 
-    VALUES (NEW.key, OLD.value, NEW.value);
-  END IF;
-END$$
-DELIMITER ;
-
--- TRIGGER 6: Validate coupon usage
-DELIMITER $$
-CREATE TRIGGER validate_coupon_usage
-BEFORE INSERT ON orders
-FOR EACH ROW
-BEGIN
-  IF NEW.couponCode IS NOT NULL THEN
+  IF NEW.coupon_code IS NOT NULL AND NEW.coupon_code <> '' THEN
     IF NOT EXISTS (
-      SELECT 1 FROM coupons 
-      WHERE code = NEW.couponCode 
-      AND isActive = TRUE 
-      AND CURDATE() BETWEEN validFrom AND validTo
-      AND (maxUses IS NULL OR usedCount < maxUses)
-      AND NEW.totalAmount >= minOrderValue
+      SELECT 1 FROM public.coupons
+      WHERE code = NEW.coupon_code
+        AND is_active = true
+        AND CURRENT_DATE BETWEEN valid_from AND valid_to
+        AND (max_uses IS NULL OR used_count < max_uses)
+        AND NEW.total_amount >= min_order_value
     ) THEN
-      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Invalid or expired coupon code';
+      RAISE EXCEPTION 'Invalid or expired coupon code: %', NEW.coupon_code
+        USING ERRCODE = 'check_violation';
     END IF;
   END IF;
-END$$
-DELIMITER ;
+  RETURN NEW;
+END;
+$$;
 
--- TRIGGER 7: Increment coupon usage count
-DELIMITER $$
-CREATE TRIGGER increment_coupon_usage
-AFTER INSERT ON orders
-FOR EACH ROW
+DROP TRIGGER IF EXISTS trg_orders_validate_coupon ON public.orders;
+CREATE TRIGGER trg_orders_validate_coupon
+  BEFORE INSERT ON public.orders
+  FOR EACH ROW EXECUTE FUNCTION public.fn_validate_coupon_usage();
+
+-- ============================================================================
+-- 13. TRIGGER: increment coupon used_count after order insert
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.fn_increment_coupon_usage()
+RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  IF NEW.couponCode IS NOT NULL THEN
-    UPDATE coupons SET usedCount = usedCount + 1 WHERE code = NEW.couponCode;
+  IF NEW.coupon_code IS NOT NULL AND NEW.coupon_code <> '' THEN
+    UPDATE public.coupons SET used_count = used_count + 1 WHERE code = NEW.coupon_code;
   END IF;
-END$$
-DELIMITER ;
+  RETURN NEW;
+END;
+$$;
 
--- TRIGGER 8: Track inventory on order creation
-DELIMITER $$
-CREATE TRIGGER track_inventory_on_order
-AFTER INSERT ON orders
-FOR EACH ROW
-BEGIN
-  DECLARE item_id INT;
-  DECLARE item_qty INT;
-  DECLARE idx INT DEFAULT 0;
-  DECLARE json_length INT;
-  
-  SET json_length = JSON_LENGTH(NEW.items);
-  
-  WHILE idx < json_length DO
-    SET item_id = JSON_EXTRACT(NEW.items, CONCAT('$[', idx, '].id'));
-    SET item_qty = JSON_EXTRACT(NEW.items, CONCAT('$[', idx, '].quantity'));
-    
-    UPDATE menu_items SET quantity = quantity - item_qty WHERE id = item_id;
-    
-    INSERT INTO inventory_transactions (menuItemId, quantity, type, orderId) 
-    VALUES (item_id, -item_qty, 'sale', NEW.id);
-    
-    SET idx = idx + 1;
-  END WHILE;
-END$$
-DELIMITER ;
+DROP TRIGGER IF EXISTS trg_orders_increment_coupon ON public.orders;
+CREATE TRIGGER trg_orders_increment_coupon
+  AFTER INSERT ON public.orders
+  FOR EACH ROW EXECUTE FUNCTION public.fn_increment_coupon_usage();
 
--- TRIGGER 9: Update loyalty points on order completion
-DELIMITER $$
-CREATE TRIGGER update_loyalty_points_on_order
-AFTER UPDATE ON orders
-FOR EACH ROW
+-- ============================================================================
+-- 14. TRIGGER: decrement inventory + log inventory_transactions on order insert
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.fn_track_inventory_on_order()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  item jsonb;
+  item_id text;
+  item_qty integer;
 BEGIN
-  DECLARE points_earned INT;
-  DECLARE points_per_unit DECIMAL(5, 2) DEFAULT 1;
-  
-  IF NEW.status = 'completed' AND OLD.status != 'completed' THEN
-    SET points_earned = FLOOR(NEW.totalAmount * points_per_unit);
-    
-    INSERT INTO loyalty_points (phone, points, totalSpent, totalOrders, lastOrderDate)
-    VALUES (NEW.customerPhone, points_earned, NEW.totalAmount, 1, NOW())
-    ON DUPLICATE KEY UPDATE 
-      points = points + VALUES(points),
-      totalSpent = totalSpent + VALUES(totalSpent),
-      totalOrders = totalOrders + 1,
-      lastOrderDate = NOW();
-    
-    INSERT INTO loyalty_transactions (phone, points, type, orderId, description)
-    VALUES (NEW.customerPhone, points_earned, 'earn', NEW.id, CONCAT('Order #', NEW.orderNumber));
+  IF NEW.items IS NULL OR jsonb_typeof(NEW.items) <> 'array' THEN
+    RETURN NEW;
   END IF;
-END$$
-DELIMITER ;
 
--- TRIGGER 10: Log activity on menu changes
-DELIMITER $$
-CREATE TRIGGER log_menu_item_creation
-AFTER INSERT ON menu_items
-FOR EACH ROW
-BEGIN
-  INSERT INTO activity_logs (userId, action, category) 
-  VALUES (NULL, CONCAT('Added menu item: ', NEW.name, ' (', NEW.price, ')'), 'menu');
-END$$
-DELIMITER ;
+  FOR item IN SELECT * FROM jsonb_array_elements(NEW.items) LOOP
+    item_id  := item->>'id';
+    item_qty := COALESCE((item->>'quantity')::integer, 1);
+    IF item_id IS NULL THEN CONTINUE; END IF;
 
--- TRIGGER 11: Log activity on menu item updates
-DELIMITER $$
-CREATE TRIGGER log_menu_item_update
-AFTER UPDATE ON menu_items
-FOR EACH ROW
+    -- Best-effort: only track if the menu item still exists
+    IF EXISTS (SELECT 1 FROM public.menu_items WHERE id = item_id) THEN
+      UPDATE public.menu_items
+        SET quantity = GREATEST(0, quantity - item_qty)
+        WHERE id = item_id;
+
+      INSERT INTO public.inventory_transactions (menu_item_id, quantity, type, order_id)
+      VALUES (item_id, -item_qty, 'sale', NEW.id);
+    END IF;
+  END LOOP;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_orders_track_inventory ON public.orders;
+CREATE TRIGGER trg_orders_track_inventory
+  AFTER INSERT ON public.orders
+  FOR EACH ROW EXECUTE FUNCTION public.fn_track_inventory_on_order();
+
+-- ============================================================================
+-- 15. TRIGGER: auto-disable menu items when out of stock + low-stock alerts
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.fn_menu_item_stock_signals()
+RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  IF OLD.name != NEW.name OR OLD.price != NEW.price OR OLD.isAvailable != NEW.isAvailable THEN
-    INSERT INTO activity_logs (userId, action, category) 
-    VALUES (NULL, CONCAT('Updated menu item: ', NEW.name), 'menu');
+  IF NEW.quantity <= 0 AND OLD.is_available = true THEN
+    NEW.is_available := false;
+    INSERT INTO public.notifications (type, title, message, related_entity_type, related_entity_id)
+    VALUES ('out_of_stock',
+            NEW.name || ' is out of stock',
+            'Menu item ' || NEW.name || ' has been automatically disabled.',
+            'menu_item', NEW.id);
+  ELSIF NEW.quantity <= NEW.low_stock_threshold AND OLD.quantity > NEW.low_stock_threshold THEN
+    INSERT INTO public.notifications (type, title, message, related_entity_type, related_entity_id)
+    VALUES ('low_stock',
+            NEW.name || ' is low on stock',
+            NEW.name || ' is below reorder threshold (' || NEW.low_stock_threshold || ' units).',
+            'menu_item', NEW.id);
   END IF;
-END$$
-DELIMITER ;
+  RETURN NEW;
+END;
+$$;
 
--- TRIGGER 12: Log activity on reservation creation
-DELIMITER $$
-CREATE TRIGGER log_reservation_creation
-AFTER INSERT ON reservations
-FOR EACH ROW
-BEGIN
-  INSERT INTO activity_logs (userId, action, category) 
-  VALUES (NULL, CONCAT('New reservation: ', NEW.customerName, ' for ', NEW.partySize, ' people on ', NEW.date), 'reservations');
-END$$
-DELIMITER ;
+DROP TRIGGER IF EXISTS trg_menu_items_stock_signals ON public.menu_items;
+CREATE TRIGGER trg_menu_items_stock_signals
+  BEFORE UPDATE OF quantity ON public.menu_items
+  FOR EACH ROW EXECUTE FUNCTION public.fn_menu_item_stock_signals();
 
--- TRIGGER 13: Log activity on order creation
-DELIMITER $$
-CREATE TRIGGER log_order_creation
-AFTER INSERT ON orders
-FOR EACH ROW
+-- ============================================================================
+-- 16. TRIGGER: award loyalty points when an order moves to 'completed'
+-- ============================================================================
+CREATE OR REPLACE FUNCTION public.fn_award_loyalty_points()
+RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  pts integer;
 BEGIN
-  INSERT INTO activity_logs (userId, action, category) 
-  VALUES (NULL, CONCAT('New order: #', NEW.orderNumber, ' from ', NEW.customerName, ' (', NEW.totalAmount, ')'), 'orders');
-END$$
-DELIMITER ;
+  IF NEW.status = 'completed' AND OLD.status <> 'completed' THEN
+    pts := floor(NEW.total_amount)::integer; -- 1 point per whole currency unit
 
--- TRIGGER 14: Validate reservation date is in future
-DELIMITER $$
-CREATE TRIGGER validate_reservation_date
-BEFORE INSERT ON reservations
-FOR EACH ROW
-BEGIN
-  IF NEW.date < CURDATE() THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Reservation date must be in the future';
+    INSERT INTO public.loyalty_points (phone, points, total_spent, total_orders, last_order_date)
+    VALUES (NEW.customer_phone, pts, NEW.total_amount, 1, now())
+    ON CONFLICT (phone) DO UPDATE SET
+      points          = public.loyalty_points.points       + EXCLUDED.points,
+      total_spent     = public.loyalty_points.total_spent  + EXCLUDED.total_spent,
+      total_orders    = public.loyalty_points.total_orders + 1,
+      last_order_date = now(),
+      updated_at      = now();
+
+    INSERT INTO public.loyalty_transactions (phone, points, type, order_id, description)
+    VALUES (NEW.customer_phone, pts, 'earn', NEW.id, 'Order #' || NEW.order_number);
   END IF;
-END$$
-DELIMITER ;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_orders_award_loyalty ON public.orders;
+CREATE TRIGGER trg_orders_award_loyalty
+  AFTER UPDATE OF status ON public.orders
+  FOR EACH ROW EXECUTE FUNCTION public.fn_award_loyalty_points();
 
 -- ============================================================================
--- SCHEDULED EVENTS FOR BUSINESS RULES
+-- 17. TRIGGER: audit changes to site_settings values
 -- ============================================================================
-
--- EVENT 1: Archive old orders monthly
-DELIMITER $$
-CREATE EVENT IF NOT EXISTS archive_old_orders
-ON SCHEDULE EVERY 1 MONTH
-STARTS CURRENT_TIMESTAMP
-DO
+CREATE OR REPLACE FUNCTION public.fn_audit_site_settings()
+RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  DELETE FROM orders 
-  WHERE status IN ('completed', 'cancelled') 
-  AND createdAt < DATE_SUB(NOW(), INTERVAL 6 MONTH);
-END$$
-DELIMITER ;
-
--- EVENT 2: Archive old messages monthly
-DELIMITER $$
-CREATE EVENT IF NOT EXISTS archive_old_messages
-ON SCHEDULE EVERY 1 MONTH
-STARTS CURRENT_TIMESTAMP
-DO
-BEGIN
-  DELETE FROM contact_messages 
-  WHERE isRead = TRUE 
-  AND createdAt < DATE_SUB(NOW(), INTERVAL 3 MONTH);
-END$$
-DELIMITER ;
-
--- EVENT 3: Expire old coupons daily
-DELIMITER $$
-CREATE EVENT IF NOT EXISTS expire_old_coupons
-ON SCHEDULE EVERY 1 DAY
-STARTS CURRENT_TIMESTAMP
-DO
-BEGIN
-  UPDATE coupons SET isActive = FALSE WHERE validTo < CURDATE();
-END$$
-DELIMITER ;
-
--- EVENT 4: Clean up old activity logs monthly
-DELIMITER $$
-CREATE EVENT IF NOT EXISTS cleanup_old_activity_logs
-ON SCHEDULE EVERY 1 MONTH
-STARTS CURRENT_TIMESTAMP
-DO
-BEGIN
-  DELETE FROM activity_logs WHERE createdAt < DATE_SUB(NOW(), INTERVAL 1 YEAR);
-END$$
-DELIMITER ;
-
--- ============================================================================
--- STORED PROCEDURES FOR BUSINESS RULES
--- ============================================================================
-
--- PROCEDURE 1: Get all active business rules
-DELIMITER $$
-CREATE PROCEDURE IF NOT EXISTS get_all_business_rules()
-BEGIN
-  SELECT * FROM site_settings WHERE key NOT LIKE 'template_%' ORDER BY key;
-END$$
-DELIMITER ;
-
--- PROCEDURE 2: Update business rule
-DELIMITER $$
-CREATE PROCEDURE IF NOT EXISTS update_business_rule(
-  IN p_key VARCHAR(128),
-  IN p_value TEXT
-)
-BEGIN
-  UPDATE site_settings SET value = p_value WHERE key = p_key;
-END$$
-DELIMITER ;
-
--- PROCEDURE 3: Check if customer can place order
-DELIMITER $$
-CREATE PROCEDURE IF NOT EXISTS check_order_eligibility(
-  IN p_phone VARCHAR(20),
-  IN p_total DECIMAL(10, 2),
-  OUT p_eligible BOOLEAN,
-  OUT p_reason TEXT
-)
-BEGIN
-  DECLARE min_order DECIMAL(10, 2);
-  DECLARE is_within_hours BOOLEAN;
-  
-  SET p_eligible = TRUE;
-  SET p_reason = '';
-  
-  SELECT CAST(value AS DECIMAL) INTO min_order FROM site_settings WHERE key = 'minimumOrderValue';
-  
-  IF p_total < min_order THEN
-    SET p_eligible = FALSE;
-    SET p_reason = CONCAT('Order below minimum value of ', min_order);
+  IF NEW.value IS DISTINCT FROM OLD.value THEN
+    INSERT INTO public.business_rules_audit (rule_key, old_value, new_value, changed_by)
+    VALUES (NEW.key, OLD.value, NEW.value, auth.uid());
   END IF;
-  
-  -- Add more checks as needed
-END$$
-DELIMITER ;
+  RETURN NEW;
+END;
+$$;
 
--- PROCEDURE 4: Apply loyalty points discount
-DELIMITER $$
-CREATE PROCEDURE IF NOT EXISTS apply_loyalty_discount(
-  IN p_phone VARCHAR(20),
-  IN p_points_to_redeem INT,
-  OUT p_discount DECIMAL(10, 2)
-)
+DROP TRIGGER IF EXISTS trg_site_settings_audit ON public.site_settings;
+CREATE TRIGGER trg_site_settings_audit
+  AFTER UPDATE ON public.site_settings
+  FOR EACH ROW EXECUTE FUNCTION public.fn_audit_site_settings();
+
+-- ============================================================================
+-- 18. RLS — admin-only on all business-rules tables
+-- ============================================================================
+ALTER TABLE public.valid_status_transitions  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.role_permissions          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.coupons                   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.holidays                  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.inventory_transactions    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.loyalty_points            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.loyalty_transactions      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notifications             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.business_rules_audit      ENABLE ROW LEVEL SECURITY;
+
+DO $do$
+DECLARE
+  policies text[][] := ARRAY[
+    -- read-mostly tables: public can read coupons (to validate at checkout), holidays (to show on UI)
+    ARRAY['coupons',  'coupons_public_read',  'SELECT', 'is_active = true', ''],
+    ARRAY['coupons',  'coupons_admin_write',  'ALL',    'public.is_admin(auth.uid())', 'public.is_admin(auth.uid())'],
+    ARRAY['holidays', 'holidays_public_read', 'SELECT', 'true', ''],
+    ARRAY['holidays', 'holidays_admin_write', 'ALL',    'public.is_admin(auth.uid())', 'public.is_admin(auth.uid())'],
+
+    -- everything else: admin only
+    ARRAY['valid_status_transitions', 'transitions_admin_all', 'ALL', 'public.is_admin(auth.uid())', 'public.is_admin(auth.uid())'],
+    ARRAY['role_permissions',         'role_perms_admin_all',  'ALL', 'public.is_admin(auth.uid())', 'public.is_admin(auth.uid())'],
+    ARRAY['inventory_transactions',   'inv_tx_admin_all',      'ALL', 'public.is_admin(auth.uid())', 'public.is_admin(auth.uid())'],
+    ARRAY['loyalty_points',           'loyalty_pts_admin_all', 'ALL', 'public.is_admin(auth.uid())', 'public.is_admin(auth.uid())'],
+    ARRAY['loyalty_transactions',     'loyalty_tx_admin_all',  'ALL', 'public.is_admin(auth.uid())', 'public.is_admin(auth.uid())'],
+    ARRAY['notifications',            'notifs_admin_all',      'ALL', 'public.is_admin(auth.uid())', 'public.is_admin(auth.uid())'],
+    ARRAY['business_rules_audit',     'audit_admin_read',      'SELECT', 'public.is_admin(auth.uid())', '']
+  ];
 BEGIN
-  DECLARE available_points INT;
-  DECLARE points_value DECIMAL(5, 2) DEFAULT 0.10;
-  
-  SELECT points INTO available_points FROM loyalty_points WHERE phone = p_phone;
-  
-  IF available_points >= p_points_to_redeem THEN
-    SET p_discount = p_points_to_redeem * points_value;
-    UPDATE loyalty_points SET points = points - p_points_to_redeem WHERE phone = p_phone;
-    INSERT INTO loyalty_transactions (phone, points, type, description)
-    VALUES (p_phone, -p_points_to_redeem, 'redeem', CONCAT('Redeemed ', p_points_to_redeem, ' points'));
-  ELSE
-    SET p_discount = 0;
-  END IF;
-END$$
-DELIMITER ;
+  FOR i IN 1 .. array_upper(policies, 1) LOOP
+    EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', policies[i][2], policies[i][1]);
+    EXECUTE format(
+      'CREATE POLICY %I ON public.%I FOR %s%s%s',
+      policies[i][2], policies[i][1], policies[i][3],
+      CASE WHEN policies[i][4] <> '' THEN ' USING (' || policies[i][4] || ')' ELSE '' END,
+      CASE WHEN policies[i][5] <> '' THEN ' WITH CHECK (' || policies[i][5] || ')' ELSE '' END
+    );
+  END LOOP;
+END $do$;
 
--- ============================================================================
--- VIEWS FOR BUSINESS RULES REPORTING
--- ============================================================================
-
--- VIEW 1: Current inventory status
-CREATE OR REPLACE VIEW inventory_status AS
-SELECT 
-  id,
-  name,
-  quantity,
-  lowStockThreshold,
-  CASE 
-    WHEN quantity <= 0 THEN 'Out of Stock'
-    WHEN quantity <= lowStockThreshold THEN 'Low Stock'
-    ELSE 'In Stock'
-  END as stock_status,
-  isAvailable
-FROM menu_items
-ORDER BY quantity ASC;
-
--- VIEW 2: Coupon usage report
-CREATE OR REPLACE VIEW coupon_usage_report AS
-SELECT 
-  code,
-  description,
-  discountValue,
-  discountType,
-  validFrom,
-  validTo,
-  maxUses,
-  usedCount,
-  CASE WHEN usedCount >= maxUses THEN 'Exhausted' ELSE 'Active' END as status
-FROM coupons
-ORDER BY validTo DESC;
-
--- VIEW 3: Customer loyalty status
-CREATE OR REPLACE VIEW customer_loyalty_status AS
-SELECT 
-  phone,
-  points,
-  totalSpent,
-  totalOrders,
-  lastOrderDate,
-  CASE 
-    WHEN points >= 500 THEN 'Gold'
-    WHEN points >= 250 THEN 'Silver'
-    WHEN points >= 100 THEN 'Bronze'
-    ELSE 'Regular'
-  END as tier
-FROM loyalty_points
-ORDER BY points DESC;
-
--- VIEW 4: Business rules audit trail
-CREATE OR REPLACE VIEW business_rules_changes AS
-SELECT 
-  ruleKey,
-  oldValue,
-  newValue,
-  changedAt,
-  TIMEDIFF(changedAt, LAG(changedAt) OVER (PARTITION BY ruleKey ORDER BY changedAt)) as time_since_last_change
-FROM business_rules_audit
-ORDER BY changedAt DESC;
-
--- ============================================================================
--- DEFAULT BUSINESS RULES
--- ============================================================================
-
--- Insert default business rules if they don't exist
-INSERT IGNORE INTO `site_settings` (`key`, `value`) VALUES
--- Pricing rules
-('minimumOrderValue', '500'),
-('deliveryFee', '100'),
-('taxRate', '16'),
-('discountPercentage', '10'),
-('discountThreshold', '5000'),
-
--- Reservation rules
-('minPartySize', '1'),
-('maxPartySize', '50'),
-('advanceBookingDays', '30'),
-('cancellationWindowHours', '2'),
-('reservationDurationHours', '2'),
-
--- Order rules
-('orderCancellationWindowMinutes', '15'),
-('estimatedDeliveryMinutes', '45'),
-('autoCompleteOrdersAfterHours', '24'),
-
--- Menu rules
-('maxFeaturedItemsPerCategory', '5'),
-('maxDescriptionLength', '500'),
-
--- Communication rules
-('whatsappEnabled', 'true'),
-('emailEnabled', 'true'),
-('smsEnabled', 'false'),
-('notificationTemplate_orderConfirmed', 'Your order #{{orderNumber}} has been confirmed! Estimated delivery: {{estimatedTime}}'),
-('notificationTemplate_orderReady', 'Your order #{{orderNumber}} is ready for pickup!'),
-('notificationTemplate_outForDelivery', 'Your order #{{orderNumber}} is on the way! Driver: {{driverName}}'),
-
--- Data retention rules
-('orderRetentionDays', '180'),
-('messageRetentionDays', '90'),
-('customerDataRetentionDays', '365'),
-
--- Inventory rules
-('trackInventory', 'true'),
-('lowStockThreshold', '10'),
-
--- Loyalty rules
-('loyaltyPointsPerUnit', '1'),
-('loyaltyPointValue', '0.10');
-
--- ============================================================================
--- END OF BUSINESS RULES SCHEMA
--- ============================================================================
+COMMIT;

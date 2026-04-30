@@ -9,14 +9,13 @@
     "moduleResolution": "bundler",
     "noEmit": true,
     "paths": {
-      "@/*": ["./src/*"],
-      "@shared/*": ["./shared/*"]
+      "@/*": ["./src/*"]
     },
     "skipLibCheck": true,
     "strict": true,
     "tsBuildInfoFile": "./node_modules/typescript/tsbuildinfo",
     "types": ["node", "vite/client"]
   },
-  "exclude": ["node_modules", "build", "dist", "client", "server", "**/*.test.ts"],
-  "include": ["src/**/*", "shared/**/*"]
+  "exclude": ["node_modules", "build", "dist"],
+  "include": ["src/**/*"]
 }

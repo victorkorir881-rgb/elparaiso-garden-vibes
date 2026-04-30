@@ -39,7 +39,7 @@
 - [x] WhatsApp floating CTA on all public pages
 
 ## Phase 5: Admin Panel
-- [x] Admin login page (Manus OAuth)
+- [x] Admin login page (Supabase Auth)
 - [x] Admin dashboard (stats cards, recent reservations, activity log, quick actions)
 - [x] Menu manager (categories + items CRUD, image upload, featured/availability toggles)
 - [x] Reservations manager (table, filter by status/date, search, status update, WhatsApp link)
@@ -66,7 +66,7 @@
 - [ ] Set WhatsApp number in Settings → Contact
 - [ ] Upload gallery photos via Admin → Gallery
 - [ ] Add menu categories and items via Admin → Menu
-- [ ] Publish via Manus UI Publish button
+- [ ] Publish via Lovable
 
 
 ## Order Tracking Feature (Complete)
@@ -118,13 +118,16 @@
 - [x] Fix /admin/menu 404 routing error - changed Route path to /admin/* with wildcard matching
 
 
-## M-Pesa Payment Integration (In Progress)
-- [ ] Add Payments table to Drizzle schema
-- [ ] Run migration for Payments table
-- [ ] Create Flutterwave payment backend with tRPC routers
-- [ ] Add payment UI to OrderPage checkout
-- [ ] Add payment UI to ReservationsPage checkout
-- [ ] Implement webhook handling for payment status updates
-- [ ] Add payment tracking and status management
+## M-Pesa Daraja STK Push Payment Integration (Code Complete — pending Supabase deploy & secrets)
+- [x] Add `payments` table migration → `sql/0003_payments.sql` (with RLS, enum, indexes, updated_at trigger)
+- [x] `mpesa-initiate` edge function (OAuth, STK Push, persists pending payment row)
+- [x] `mpesa-callback` edge function (verifies CheckoutRequestID, updates order to `paid`)
+- [x] `verify_jwt = false` config for both functions
+- [x] `useInitiateMpesaPayment` + `usePaymentStatus` hooks (`src/lib/payments.ts`)
+- [x] OrderPage: triggers STK Push after order create + polling modal with retry
+- [ ] User: apply `sql/0003_payments.sql` on Supabase
+- [ ] User: deploy edge functions and add secrets (see chat instructions)
+- [ ] Add payment UI to ReservationsPage (deferred — same hook reusable)
 - [ ] Write payment integration tests
 - [ ] Save checkpoint
+

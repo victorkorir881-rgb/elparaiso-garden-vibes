@@ -32,7 +32,7 @@ Full migration to TanStack Start. Existing stack: Express + tRPC + Wouter + Manu
 - [x] **0.6** File-based routes for every public + admin page with `head()` metadata. (done: 2026-04-28)
 - [x] **0.7** `src/main.tsx` mounts `<RouterProvider>`; App.tsx deleted. (done: 2026-04-28)
 - [x] **0.8** Replaced all `wouter` imports with `@tanstack/react-router`. (done: 2026-04-28)
-- [ ] **0.9** `bun remove wouter` and delete `patches/wouter@3.7.1.patch`. (pending — wouter still in package.json but no longer imported)
+- [x] **0.9** `bun remove wouter` and delete `patches/wouter@3.7.1.patch`. (done: 2026-04-30)
 
 **Wave 3 — Replace server (kills Express + tRPC) — REVISED STRATEGY**
 
@@ -45,7 +45,7 @@ After audit, the React app does NOT actually call tRPC for data — every page a
 - [x] **0.14** Quarantine `server/` and `client/` from `tsconfig.json` so they don't break typecheck. Code kept on disk for reference. (done: 2026-04-28)
 - [ ] **0.15** Add `src/integrations/supabase/client.server.ts` (admin client) + `auth-middleware.ts` for future `createServerFn` handlers. (pending — only needed when first server route is added)
 - [ ] **0.16** Migrate webhooks (Flutterwave / M-Pesa callbacks — Phase 7) to `src/routes/api/public/*.ts`. (pending — done as part of Phase 7)
-- [ ] **0.17** Delete `server/`, `client/`, `shared/`, `drizzle.config.ts`, `patches/`, and remove tRPC + Express + Drizzle deps. (pending — schedule once payments are migrated)
+- [x] **0.17** Delete `server/`, `client/`, `shared/`, `drizzle.config.ts`, `patches/`, and remove tRPC + Express + Drizzle deps. (done: 2026-04-30 — payments webhooks will be added under `src/routes/api/` in Phase 7)
 
 **Wave 4 — Auth (already done in Wave 3 by accident)**
 - [x] **0.18** `src/lib/auth.tsx` already wraps Supabase Auth (email + password). (done: 2026-04-28)
@@ -53,9 +53,9 @@ After audit, the React app does NOT actually call tRPC for data — every page a
 - [ ] **0.20** Replace inline admin guard with a `_authenticated/_admin` pathless layout route. (deferred — current AdminLayout guard is functional; refactor when adding more authenticated areas)
 
 **Wave 5 — Cleanup**
-- [ ] **0.21** Delete `vite.config.ts.bak`, legacy `client/`, `server/`, `shared/`, `patches/`, `drizzle.config.ts`. (pending — after Phase 7 webhooks)
-- [ ] **0.22** Replace `src/index.css` with `src/styles.css` (Tailwind v4 + oklch tokens). (pending)
-- [ ] **0.23** Remove dead deps: `@trpc/*`, `express`, `drizzle-*`, `wouter`, `vite-plugin-manus-runtime`, `@builder.io/vite-plugin-jsx-loc`. (pending)
+- [x] **0.21** Delete `vite.config.ts.bak`, legacy `client/`, `server/`, `shared/`, `patches/`, `drizzle.config.ts`. (done: 2026-04-30)
+- [ ] **0.22** Replace `src/index.css` with `src/styles.css` (Tailwind v4 + oklch tokens). (deferred — Tailwind v3 in use; revisit when upgrading)
+- [x] **0.23** Remove dead deps: `@trpc/*`, `express`, `drizzle-*`, `wouter`, `vite-plugin-manus-runtime`, `@builder.io/vite-plugin-jsx-loc`. (done: 2026-04-30)
 - [ ] **0.24** Rewrite `server/*.test.ts` against Supabase hooks / server functions (or delete if obsolete). (pending)
 - [ ] **0.25** Update `README.md` with new structure diagram + run instructions. (pending)
 
@@ -69,13 +69,13 @@ After audit, the React app does NOT actually call tRPC for data — every page a
 
 External Supabase is the production database. **Every schema change ships as a numbered SQL file in `/sql/`** that runs cleanly top-to-bottom on a fresh database.
 
-- [ ] **1.1** Create `/sql/0001_init.sql` from existing `docs/supabase_schema.sql` — must be idempotent (`CREATE TABLE IF NOT EXISTS`, `DROP POLICY IF EXISTS` before `CREATE POLICY`).
-- [ ] **1.2** Create `/sql/0002_business_rules.sql` from `docs/BUSINESS_RULES_SCHEMA.sql`.
-- [ ] **1.3** Create `/sql/0003_orders.sql` (orders + order_items tables, indexes, RLS).
-- [ ] **1.4** Create `/sql/0004_payments.sql` (payments table for M-Pesa/Flutterwave — see Phase 7).
-- [ ] **1.5** Add `/sql/README.md` documenting: numbering convention, how to run on Supabase (SQL editor or `psql`), and the rule that **migrations are append-only** (never edit a shipped file).
-- [ ] **1.6** Add a `sql/_check.sh` helper that runs all migrations against a throwaway DB to catch syntax errors in CI.
-- [ ] **1.7** Verify Drizzle schema in `src/server/db.ts` matches the SQL exactly (column names, types, nullability, defaults).
+- [x] **1.1** Rewrote `/sql/0001_init.sql` as a Postgres-native baseline matching the live Supabase schema (derived from `src/integrations/supabase/types.ts`). Idempotent, transactional, RLS on every table, `admin_roles` + `has_admin_role()` / `is_admin()` security-definer helpers (no roles on profile table). Verified by running on a fresh local Postgres twice with no errors. Legacy file archived as `0001_init.sql.legacy.bak`.
+- [x] **1.2** Rewrote `/sql/0002_business_rules.sql` from scratch as Postgres/PL/pgSQL. Replaced all MySQL syntax (backticks, `ENGINE=InnoDB`, `DELIMITER $$`, `ENUM(...)`, `JSON_EXTRACT`, `SIGNAL SQLSTATE`, `ON DUPLICATE KEY UPDATE`). Includes: status-transition validation, payment-before-completion guard, coupons + applied-coupon validation, holidays, inventory tracking with auto-disable + low-stock notifications, loyalty points awarded on completion, business-rules audit. Verified clean and idempotent. Original archived as `0002_business_rules.sql.mysql.bak`.
+- [ ] **1.3** Apply `0001` and `0002` to the live Supabase project (Editor or `psql`). Even though most tables already exist, the migrations are idempotent — re-running aligns RLS policies, adds the new business-rules tables, and installs the trigger functions.
+- [ ] **1.4** Create `/sql/0003_payments.sql` (payments table for M-Pesa / Flutterwave — see Phase 7).
+- [x] **1.5** `/sql/00_README.md` already documents numbering, how to apply on Supabase, append-only rule, and a local verification command.
+- [ ] **1.6** Add a `sql/_check.sh` helper for CI that runs all migrations against a throwaway DB.
+- [ ] **1.7** Generate fresh `src/integrations/supabase/types.ts` after applying `0002` so the new business-rules tables are typed for the frontend.
 
 ---
 
@@ -84,9 +84,9 @@ External Supabase is the production database. **Every schema change ships as a n
 - [x] Dark premium theme (charcoal/gold/ivory) — already implemented, port to `src/styles.css` during Phase 0.
 - [x] Public layout (header, mobile drawer, footer)
 - [x] Admin layout (sidebar + auth guard)
-- [ ] **2.1** Re-verify all layouts work after Phase 0 migration to TanStack Router.
+- [x] **2.1** Re-verify all layouts work after Phase 0 migration to TanStack Router. (done: 2026-04-30 — public layout renders, mobile sheet works after Slot fix)
 - [ ] **2.2** Add per-route `head()` metadata on every shareable route.
-- [ ] **2.3** Add `404` not-found component on `__root.tsx` and `errorComponent` on every route with a loader.
+- [x] **2.3** Add `404` not-found component on `__root.tsx` and `errorComponent` on every route with a loader. (done: 2026-04-30 — root has both notFoundComponent + errorComponent; per-loader components to be added when loaders are introduced)
 
 ---
 

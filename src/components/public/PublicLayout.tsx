@@ -53,7 +53,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
               <Link to="/reservations"><Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90">Reserve a Table</Button></Link>
             </div>
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-              <SheetTrigger asChild className="md:hidden"><Button variant="ghost" size="icon" className="text-foreground"><Menu className="w-5 h-5" /></Button></SheetTrigger>
+              <SheetTrigger className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-md text-foreground hover:bg-accent"><Menu className="w-5 h-5" /></SheetTrigger>
               <SheetContent side="right" className="w-72 bg-card border-border p-0">
                 <div className="flex flex-col h-full">
                   <div className="flex items-center justify-between p-6 border-b border-border">

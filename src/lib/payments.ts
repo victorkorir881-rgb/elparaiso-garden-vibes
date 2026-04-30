@@ -1,0 +1,70 @@
+import { supabase } from "@/integrations/supabase/client";
+import { useMutation, useQuery } from "@tanstack/react-query";
+
+export interface InitiatePaymentInput {
+  orderId: string;
+  phone: string;
+  amount: number;
+}
+
+export interface InitiatePaymentResult {
+  paymentId: string;
+  checkoutRequestId: string;
+  message: string;
+}
+
+/** Triggers the STK Push by calling the `mpesa-initiate` edge function. */
+export function useInitiateMpesaPayment() {
+  return useMutation<InitiatePaymentResult, Error, InitiatePaymentInput>({
+    mutationFn: async (input) => {
+      const { data, error } = await supabase.functions.invoke<InitiatePaymentResult>(
+        "mpesa-initiate",
+        { body: input },
+      );
+      if (error) throw new Error(error.message ?? "Failed to start payment");
+      if (!data) throw new Error("No response from payment service");
+      return data;
+    },
+  });
+}
+
+export type PaymentStatus =
+  | "pending"
+  | "success"
+  | "failed"
+  | "cancelled"
+  | "timeout";
+
+export interface PaymentRow {
+  id: string;
+  status: PaymentStatus;
+  result_desc: string | null;
+  mpesa_receipt_number: string | null;
+}
+
+/**
+ * Polls the `payments` row every `intervalMs` while the payment is pending.
+ * Pass `paymentId = null` to disable.
+ */
+export function usePaymentStatus(paymentId: string | null, intervalMs = 3000) {
+  return useQuery<PaymentRow | null>({
+    queryKey: ["payment", paymentId],
+    enabled: !!paymentId,
+    refetchInterval: (q) => {
+      const d = q.state.data as PaymentRow | null | undefined;
+      return d && d.status !== "pending" ? false : intervalMs;
+    },
+    queryFn: async () => {
+      if (!paymentId) return null;
+      // `payments` table is created by sql/0003_payments.sql; cast around
+      // the generated Database types until the user regenerates them.
+      const { data, error } = await (supabase as any)
+        .from("payments")
+        .select("id, status, result_desc, mpesa_receipt_number")
+        .eq("id", paymentId)
+        .maybeSingle();
+      if (error) throw error;
+      return (data as PaymentRow | null) ?? null;
+    },
+  });
+}

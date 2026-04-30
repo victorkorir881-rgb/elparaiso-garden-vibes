@@ -1,5 +1,5 @@
-@import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
@@ -130,11 +130,48 @@
   .card-hover { @apply transition-all duration-300 hover:shadow-xl hover:-translate-y-1; }
 }
 
+/* ============================================================
+   Global "rise" animation — items enter from bottom to top.
+   Applied site-wide to main content blocks and common cards.
+   ============================================================ */
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(24px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-.animate-fade-in-up { animation: fadeInUp 0.6s ease-out forwards; }
+.animate-fade-in-up,
+.animate-rise { animation: fadeInUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Auto-apply rise to top-level page sections, hero blocks, and cards.
+   Honors prefers-reduced-motion. */
+@media (prefers-reduced-motion: no-preference) {
+  main > *,
+  main section,
+  main [data-rise],
+  main .rise {
+    animation: fadeInUp 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  /* Stagger children of grids/lists for a cascading rise */
+  main .stagger > * { animation: fadeInUp 0.55s cubic-bezier(0.22, 1, 0.36, 1) both; }
+  main .stagger > *:nth-child(1) { animation-delay: 0.04s; }
+  main .stagger > *:nth-child(2) { animation-delay: 0.08s; }
+  main .stagger > *:nth-child(3) { animation-delay: 0.12s; }
+  main .stagger > *:nth-child(4) { animation-delay: 0.16s; }
+  main .stagger > *:nth-child(5) { animation-delay: 0.20s; }
+  main .stagger > *:nth-child(6) { animation-delay: 0.24s; }
+  main .stagger > *:nth-child(7) { animation-delay: 0.28s; }
+  main .stagger > *:nth-child(8) { animation-delay: 0.32s; }
+  main .stagger > *:nth-child(n+9) { animation-delay: 0.36s; }
+}
+
+/* Override default tailwind/tw-animate fade/scale to also rise from bottom */
+@keyframes fade-in   { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes scale-in  { from { opacity: 0; transform: translateY(20px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.animate-fade-in  { animation: fade-in  0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.animate-scale-in { animation: scale-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* Prevent accidental horizontal overflow on small screens */
+html, body { overflow-x: hidden; }
+img, video { max-width: 100%; height: auto; }
 
 @layer components {
   /**

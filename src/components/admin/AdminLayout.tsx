@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard, UtensilsCrossed, CalendarCheck, PartyPopper,
   Images, MessageSquare, Settings, Search, Users, Menu, X,
-  LogOut, ChevronRight, Star, Bell, Package, Sliders
+  LogOut, ChevronRight, Star, Bell, Package, Sliders, ScrollText
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +24,7 @@ const navItems = [
   { to: "/admin/business-rules", label: "Business Rules", icon: Sliders },
   { to: "/admin/seo", label: "SEO", icon: Search },
   { to: "/admin/users", label: "Users", icon: Users },
+  { to: "/admin/audit-log", label: "Audit Log", icon: ScrollText },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

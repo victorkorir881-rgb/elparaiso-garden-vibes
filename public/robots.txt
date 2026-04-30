@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /admin/
+Disallow: /reset-password
+
+Sitemap: https://elparaisogardens.vercel.app/sitemap.xml

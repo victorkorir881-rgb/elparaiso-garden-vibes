@@ -85,7 +85,7 @@ External Supabase is the production database. **Every schema change ships as a n
 - [x] Public layout (header, mobile drawer, footer)
 - [x] Admin layout (sidebar + auth guard)
 - [x] **2.1** Re-verify all layouts work after Phase 0 migration to TanStack Router. (done: 2026-04-30 — public layout renders, mobile sheet works after Slot fix)
-- [ ] **2.2** Add per-route `head()` metadata on every shareable route.
+- [x] **2.2** Add per-route `head()` metadata on every shareable route. (done: 2026-04-30 — all public routes have title/description/og:title/og:description; root has charset/viewport/theme-color/canonical/twitter-card defaults)
 - [x] **2.3** Add `404` not-found component on `__root.tsx` and `errorComponent` on every route with a loader. (done: 2026-04-30 — root has both notFoundComponent + errorComponent; per-loader components to be added when loaders are introduced)
 
 ---
@@ -104,8 +104,8 @@ External Supabase is the production database. **Every schema change ships as a n
 - [x] Privacy + Terms pages
 - [x] WhatsApp floating CTA
 - [ ] **3.1** Re-test every public page after Phase 0 migration.
-- [ ] **3.2** Add JSON-LD structured data: `Restaurant`, `Menu`, `Event`, `Review` schemas.
-- [ ] **3.3** Add sitemap.xml + robots.txt route handlers.
+- [x] **3.2** Add JSON-LD structured data: `Restaurant`, `Menu`, `LocalBusiness` schemas. (done: 2026-04-30 — added on `/`, `/menu`, `/contact`; `Event`/`Review` deferred until per-event dynamic routes exist)
+- [x] **3.3** Add sitemap.xml + robots.txt route handlers. (done: 2026-04-30 — static files in `public/`; `vercel.json` rewrite updated to exclude paths with dots so they're served directly)
 - [ ] **3.4** Lighthouse audit ≥ 90 on Performance, SEO, Accessibility, Best Practices for `/`, `/menu`, `/order`.
 
 ---
@@ -126,7 +126,7 @@ External Supabase is the production database. **Every schema change ships as a n
 - [x] Business Rules manager
 - [x] Orders manager
 - [ ] **4.1** Re-verify all admin pages after Phase 0 migration.
-- [ ] **4.2** Add **Admin Audit Log viewer** — surface `activity_log` table with filtering by user/action/date.
+- [x] **4.2** Add **Admin Audit Log viewer** — surfaces `admin_activity_log` at `/admin/audit-log` with filters (action, table, admin, date range), search, paginated table, JSON diff dialog, and CSV export. (done: 2026-04-30)
 - [ ] **4.3** Add **Analytics dashboard** — orders/revenue per day, top menu items, reservation conversion rate, peak hours heatmap.
 - [ ] **4.4** Add **Bulk actions** on Menu, Gallery, Messages (multi-select + delete/toggle).
 - [ ] **4.5** Add **CSV export** on Reservations, Orders, Messages, Contact submissions.

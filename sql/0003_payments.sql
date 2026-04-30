@@ -87,7 +87,7 @@ CREATE POLICY payments_select_own ON public.payments
 DROP POLICY IF EXISTS payments_admin_all ON public.payments;
 CREATE POLICY payments_admin_all ON public.payments
   FOR ALL TO authenticated
-  USING (public.is_admin())
-  WITH CHECK (public.is_admin());
+  USING (public.is_admin(auth.uid()))
+  WITH CHECK (public.is_admin(auth.uid()));
 
 COMMIT;

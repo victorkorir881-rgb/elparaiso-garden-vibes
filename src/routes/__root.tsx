@@ -1,6 +1,25 @@
 import { createRootRoute, Outlet } from "@tanstack/react-router";
+import { SITE_URL } from "@/lib/site-url";
 
 export const Route = createRootRoute({
+  head: () => ({
+    meta: [
+      { charSet: "utf-8" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
+      { name: "theme-color", content: "#0a0a0a" },
+      { name: "robots", content: "index, follow" },
+      { name: "author", content: "Elparaiso Garden Kisii" },
+      { property: "og:site_name", content: "Elparaiso Garden Kisii" },
+      { property: "og:type", content: "website" },
+      { property: "og:locale", content: "en_KE" },
+      { property: "og:url", content: SITE_URL },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+    links: [
+      { rel: "canonical", href: SITE_URL },
+      { rel: "icon", href: "/favicon.ico" },
+    ],
+  }),
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
   errorComponent: ErrorComponent,

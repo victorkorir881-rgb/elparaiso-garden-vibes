@@ -33,7 +33,7 @@ export default function AdminOrders() {
   const [editingTime, setEditingTime] = useState("");
 
   const { data: orders = [], isLoading } = useOrders({
-    status: filterStatus || undefined,
+    status: filterStatus && filterStatus !== "all" ? filterStatus : undefined,
     search: search || undefined,
   });
 
@@ -72,7 +72,7 @@ export default function AdminOrders() {
 
   const filteredOrders = useMemo(() => {
     return orders.filter((order: any) => {
-      if (filterType && order.order_type !== filterType) return false;
+      if (filterType && filterType !== "all" && order.order_type !== filterType) return false;
       return true;
     });
   }, [orders, filterType]);
@@ -108,25 +108,25 @@ export default function AdminOrders() {
       <Card className="p-4">
         <div className="grid md:grid-cols-4 gap-4">
           <Input placeholder="Search by order #, name, or phone..." value={search} onChange={(e) => setSearch(e.target.value)} />
-          <Select value={filterStatus} onValueChange={setFilterStatus}>
+          <Select value={filterStatus || "all"} onValueChange={setFilterStatus}>
             <SelectTrigger><SelectValue placeholder="Filter by status" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Statuses</SelectItem>
+              <SelectItem value="all">All Statuses</SelectItem>
               {statusOptions.map((status) => (
                 <SelectItem key={status} value={status}>{status.charAt(0).toUpperCase() + status.slice(1)}</SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <Select value={filterType} onValueChange={setFilterType}>
+          <Select value={filterType || "all"} onValueChange={setFilterType}>
             <SelectTrigger><SelectValue placeholder="Filter by type" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Types</SelectItem>
+              <SelectItem value="all">All Types</SelectItem>
               {orderTypeOptions.map((type) => (
                 <SelectItem key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1)}</SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" onClick={() => { setFilterStatus(""); setFilterType(""); setSearch(""); }}>Reset Filters</Button>
+          <Button variant="outline" onClick={() => { setFilterStatus("all"); setFilterType("all"); setSearch(""); }}>Reset Filters</Button>
         </div>
       </Card>
 

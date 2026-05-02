@@ -311,7 +311,23 @@ export default function OrderPage() {
                   </Card>
 
                   <Card className="p-4">
-                    <h3 className="font-semibold mb-4">Delivery Details</h3>
+                    <label className="text-sm font-medium mb-2 block">Payment Method</label>
+                    <Select value={paymentChoice} onValueChange={(v: any) => setPaymentChoice(v)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="mpesa">M-Pesa (Pay Now)</SelectItem>
+                        <SelectItem value="cash">Cash on Delivery / Pickup</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {paymentChoice === "mpesa" && (
+                      <p className="text-xs text-foreground/60 mt-2">
+                        You'll get an STK push prompt on your phone — enter your M-Pesa PIN to confirm.
+                      </p>
+                    )}
+                  </Card>
+
+                  <Card className="p-4">
+                    <h3 className="font-semibold mb-4">Customer Details</h3>
                     <div className="space-y-3">
                       <div>
                         <label className="text-sm font-medium mb-1 block">Full Name *</label>
@@ -319,7 +335,7 @@ export default function OrderPage() {
                       </div>
                       <div>
                         <label className="text-sm font-medium mb-1 block">Phone Number *</label>
-                        <Input type="tel" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="0791 224513" />
+                        <Input type="tel" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="07XX XXX XXX" />
                       </div>
                       <div>
                         <label className="text-sm font-medium mb-1 block">Email</label>

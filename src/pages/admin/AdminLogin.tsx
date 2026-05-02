@@ -1,11 +1,18 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Download } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth, supabase } from "@/lib/auth";
 import { siteUrl } from "@/lib/site-url";
+
+// chrome / edge / android beforeinstallprompt event shape
+type BIPEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+};
 
 export default function AdminLogin() {
   const navigate = useNavigate();
@@ -15,6 +22,28 @@ export default function AdminLogin() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [installEvt, setInstallEvt] = useState<BIPEvent | null>(null);
+
+  // capture install prompt so we can offer "Download as App"
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setInstallEvt(e as BIPEvent);
+    };
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+
+  const handleInstall = async () => {
+    if (!installEvt) {
+      toast.info("Use your browser menu → 'Install App' / 'Add to Home Screen' to install.");
+      return;
+    }
+    await installEvt.prompt();
+    const { outcome } = await installEvt.userChoice;
+    if (outcome === "accepted") toast.success("Admin app installed!");
+    setInstallEvt(null);
+  };
 
   if (!loading && isAuthenticated && ["super_admin", "admin", "manager", "staff"].includes(user?.role ?? "")) {
     navigate({ to: "/admin" });

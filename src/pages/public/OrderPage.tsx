@@ -20,6 +20,7 @@ export default function OrderPage() {
   
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [orderType, setOrderType] = useState<"dine-in" | "takeaway" | "delivery">("delivery");
+  const [paymentChoice, setPaymentChoice] = useState<"mpesa" | "cash">("mpesa");
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");

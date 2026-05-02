@@ -83,29 +83,47 @@ export default function OrderPage() {
     if (items.length === 0) { toast.error("Your cart is empty"); return; }
     if (orderType === "delivery" && !deliveryAddress.trim()) { toast.error("Please enter delivery address"); return; }
 
+    // basic phone validation for kenyan numbers (07XX… / 2547XX… / +2547XX…)
+    const digits = customerPhone.replace(/\D/g, "");
+    const phoneOk = /^(254[17]\d{8}|0[17]\d{8}|[17]\d{8})$/.test(digits);
+    if (paymentChoice === "mpesa" && !phoneOk) {
+      toast.error("Enter a valid Safaricom number (07XX… or 2547XX…) for M-Pesa");
+      return;
+    }
+
     setIsCheckingOut(true);
     const ordNum = generateOrderNumber();
-    const amountKes = Math.round(parseFloat(total));
+    const amountKes = Math.max(1, Math.round(parseFloat(total)));
 
     createOrder.mutate(
       {
         order_number: ordNum,
-        customer_name: customerName,
-        customer_phone: customerPhone,
-        customer_email: customerEmail || undefined,
+        customer_name: customerName.trim(),
+        customer_phone: customerPhone.trim(),
+        customer_email: customerEmail.trim() || undefined,
         items: items.map((item) => ({ id: item.id, name: item.name, price: item.price, quantity: item.quantity })),
         total_amount: parseFloat(total),
         order_type: orderType,
-        delivery_address: orderType === "delivery" ? deliveryAddress : undefined,
-        special_instructions: specialInstructions || undefined,
+        delivery_address: orderType === "delivery" ? deliveryAddress.trim() : undefined,
+        special_instructions: specialInstructions.trim() || undefined,
         estimated_time: 30,
-        payment_method: "mpesa",
+        payment_method: paymentChoice,
       },
       {
         onSuccess: (created: any) => {
           setOrderNumber(ordNum);
           setPendingOrderId(created.id);
-          // Trigger STK Push immediately
+
+          // cash on delivery / pickup — skip M-Pesa, mark order as placed
+          if (paymentChoice === "cash") {
+            toast.success("Order placed! Pay on delivery / pickup.");
+            setOrderPlaced(true);
+            clearCart();
+            setIsCheckingOut(false);
+            return;
+          }
+
+          // m-pesa — trigger STK push
           initiatePayment.mutate(
             { orderId: created.id, phone: customerPhone, amount: amountKes },
             {
@@ -116,13 +134,16 @@ export default function OrderPage() {
               },
               onError: (err) => {
                 toast.error(err.message ?? "Failed to start M-Pesa payment");
+                // order is already saved — surface success page so customer can pay later
+                setOrderPlaced(true);
+                clearCart();
                 setIsCheckingOut(false);
               },
             },
           );
         },
-        onError: () => {
-          toast.error("Failed to place order. Please try again.");
+        onError: (err: any) => {
+          toast.error(err?.message ?? "Failed to place order. Please try again.");
           setIsCheckingOut(false);
         },
       },

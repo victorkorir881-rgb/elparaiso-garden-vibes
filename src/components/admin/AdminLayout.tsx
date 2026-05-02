@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard, UtensilsCrossed, CalendarCheck, PartyPopper,
@@ -35,18 +35,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const { data: unreadCount } = useUnreadMessageCount();
 
+  // redirect to login when not authenticated — must run in effect, never during render
+  useEffect(() => {
+    if (!loading && !isAuthenticated) {
+      navigate({ to: "/admin/login" });
+    }
+  }, [loading, isAuthenticated, navigate]);
+
   // Auth guard
-  if (loading) {
+  if (loading || !isAuthenticated) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-muted-foreground">Loading...</div>
       </div>
     );
-  }
-
-  if (!isAuthenticated) {
-    navigate({ to: "/admin/login" });
-    return null;
   }
 
   if (!["super_admin", "admin", "manager", "staff"].includes(user?.role ?? "")) {
@@ -68,7 +70,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     toast.success("Logged out");
   };
 
-  const SidebarContent = () => (
+  const sidebarContent = (
     <div className="flex flex-col h-full">
       <div className="p-5 border-b border-border">
         <Link to="/" className="flex items-center gap-2">
@@ -139,7 +141,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="min-h-screen bg-background flex">
       <aside className="hidden lg:flex w-60 flex-col border-r border-border bg-card shrink-0">
-        <SidebarContent />
+        {sidebarContent}
       </aside>
 
       {sidebarOpen && (
@@ -152,7 +154,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <X className="w-4 h-4" />
               </Button>
             </div>
-            <SidebarContent />
+            {sidebarContent}
           </aside>
         </div>
       )}

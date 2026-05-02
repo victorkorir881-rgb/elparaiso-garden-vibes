@@ -185,8 +185,18 @@ export default function AdminLogin() {
           </div>
         </div>
 
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full mt-4 border-border text-foreground"
+          onClick={handleInstall}
+        >
+          <Download className="w-4 h-4 mr-2" />
+          {installEvt ? "Install Admin App" : "Add to Home Screen"}
+        </Button>
+
         <p className="text-xs text-muted-foreground text-center mt-4">
-          First registered user automatically becomes super admin.
+          First registered user becomes super admin. For security, sign in is required each browser session.
         </p>
       </div>
     </div>

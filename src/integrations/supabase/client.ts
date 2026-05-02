@@ -7,11 +7,17 @@ const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
-
+//
+// Note: we intentionally use sessionStorage (not localStorage) for the admin
+// auth session. This forces admins to re-enter their email + password every
+// time they open a fresh browser session / tab group, which matches the
+// product requirement that "every time the user logs in he should key in
+// required credentials". Tokens still auto-refresh while the tab is open.
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    storage: localStorage,
+    storage: typeof window !== "undefined" ? window.sessionStorage : undefined,
     persistSession: true,
     autoRefreshToken: true,
+    detectSessionInUrl: true,
   }
 });

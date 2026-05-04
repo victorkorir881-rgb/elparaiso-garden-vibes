@@ -131,43 +131,87 @@
 }
 
 /* ============================================================
-   Global "rise" animation — items enter from bottom to top.
-   Applied site-wide to main content blocks and common cards.
+   Global "rise" animation — the ONLY entrance animation site-wide.
+   Every element enters from bottom to top with a soft fade.
    ============================================================ */
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(28px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.animate-fade-in-up,
-.animate-rise { animation: fadeInUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
 
-/* Auto-apply rise to top-level page sections, hero blocks, and cards.
-   Honors prefers-reduced-motion. */
+.animate-fade-in-up,
+.animate-rise,
+.animate-fade-in,
+.animate-fade-out,
+.animate-scale-in,
+.animate-scale-out,
+.animate-enter,
+.animate-exit,
+.animate-in,
+.animate-out,
+[data-state="open"].animate-in,
+[data-state="closed"].animate-out {
+  animation: fadeInUp 0.55s cubic-bezier(0.22, 1, 0.36, 1) both !important;
+}
+
+/* Neutralize tw-animate / Radix directional variants so they all rise */
+[class*="slide-in-from-"],
+[class*="slide-out-to-"],
+[class*="zoom-in"],
+[class*="zoom-out"],
+[class*="fade-in"],
+[class*="fade-out"],
+[class*="spin-in"],
+[class*="spin-out"] {
+  --tw-enter-translate-x: 0 !important;
+  --tw-enter-translate-y: 28px !important;
+  --tw-enter-scale: 1 !important;
+  --tw-enter-rotate: 0 !important;
+  --tw-exit-translate-x: 0 !important;
+  --tw-exit-translate-y: 0 !important;
+  --tw-exit-scale: 1 !important;
+  --tw-exit-rotate: 0 !important;
+}
+
+/* Auto-apply rise to top-level page sections and main blocks */
 @media (prefers-reduced-motion: no-preference) {
   main > *,
   main section,
   main [data-rise],
   main .rise {
-    animation: fadeInUp 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: fadeInUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
   }
-  /* Stagger children of grids/lists for a cascading rise */
-  main .stagger > * { animation: fadeInUp 0.55s cubic-bezier(0.22, 1, 0.36, 1) both; }
-  main .stagger > *:nth-child(1) { animation-delay: 0.04s; }
-  main .stagger > *:nth-child(2) { animation-delay: 0.08s; }
-  main .stagger > *:nth-child(3) { animation-delay: 0.12s; }
-  main .stagger > *:nth-child(4) { animation-delay: 0.16s; }
-  main .stagger > *:nth-child(5) { animation-delay: 0.20s; }
-  main .stagger > *:nth-child(6) { animation-delay: 0.24s; }
-  main .stagger > *:nth-child(7) { animation-delay: 0.28s; }
-  main .stagger > *:nth-child(8) { animation-delay: 0.32s; }
-  main .stagger > *:nth-child(n+9) { animation-delay: 0.36s; }
+  main .stagger > * { animation: fadeInUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
+  main .stagger > *:nth-child(1) { animation-delay: 0.05s; }
+  main .stagger > *:nth-child(2) { animation-delay: 0.10s; }
+  main .stagger > *:nth-child(3) { animation-delay: 0.15s; }
+  main .stagger > *:nth-child(4) { animation-delay: 0.20s; }
+  main .stagger > *:nth-child(5) { animation-delay: 0.25s; }
+  main .stagger > *:nth-child(6) { animation-delay: 0.30s; }
+  main .stagger > *:nth-child(7) { animation-delay: 0.35s; }
+  main .stagger > *:nth-child(8) { animation-delay: 0.40s; }
+  main .stagger > *:nth-child(n+9) { animation-delay: 0.45s; }
 }
 
-/* Override default tailwind/tw-animate fade/scale to also rise from bottom */
-@keyframes fade-in   { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes scale-in  { from { opacity: 0; transform: translateY(20px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
-.animate-fade-in  { animation: fade-in  0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
-.animate-scale-in { animation: scale-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both; }
+/* Disable all other named animations except spin/pulse (loaders/skeletons)
+   and the rise animation itself. Anything else collapses to fadeInUp. */
+.animate-bounce,
+.animate-ping,
+.animate-wiggle,
+.animate-shimmer,
+.animate-float,
+.animate-slide-in-right,
+.animate-slide-out-right,
+.animate-slide-in-left,
+.animate-slide-out-left,
+.animate-accordion-down,
+.animate-accordion-up {
+  animation: fadeInUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) both !important;
+}
+
+/* Remove hover lift/scale micro-animations site-wide */
+.card-hover:hover,
+.hover-scale:hover { transform: none !important; }
 
 /* Prevent accidental horizontal overflow on small screens */
 html, body { overflow-x: hidden; }

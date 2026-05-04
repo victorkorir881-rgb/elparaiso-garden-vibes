@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Download } from "lucide-react";
 import { toast } from "sonner";
@@ -167,7 +168,7 @@ export default function AdminLogin() {
                     </button>
                   )}
                 </div>
-                <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="bg-input border-border text-foreground mt-1" required minLength={6} />
+                <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="bg-input border-border text-foreground mt-1" required minLength={6} />
               </div>
             )}
             <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-11 font-semibold" disabled={submitting}>

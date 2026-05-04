@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { supabase } from "@/lib/auth";
@@ -58,11 +59,11 @@ export default function ResetPassword() {
         <form onSubmit={handleSubmit} className="bg-card border border-border rounded-xl p-6 space-y-4">
           <div>
             <Label className="text-foreground">New password</Label>
-            <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} className="bg-input border-border text-foreground mt-1" />
+            <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} className="bg-input border-border text-foreground mt-1" />
           </div>
           <div>
             <Label className="text-foreground">Confirm password</Label>
-            <Input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required minLength={8} className="bg-input border-border text-foreground mt-1" />
+            <PasswordInput value={confirm} onChange={(e) => setConfirm(e.target.value)} required minLength={8} className="bg-input border-border text-foreground mt-1" />
           </div>
           <Button type="submit" className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-11 font-semibold" disabled={submitting || !recoveryReady}>
             {submitting ? "Updating..." : recoveryReady ? "Update password" : "Waiting for reset link..."}

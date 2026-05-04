@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { createRoot } from "react-dom/client";
 import { Toaster } from "@/components/ui/sonner";
@@ -7,10 +7,9 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { CartProvider } from "./contexts/CartContext";
 import { AuthProvider } from "./lib/auth";
-import { createRouter } from "./router";
+import { createRouter, queryClient } from "./router";
 import "./index.css";
 
-const queryClient = new QueryClient();
 const router = createRouter();
 
 createRoot(document.getElementById("root")!).render(

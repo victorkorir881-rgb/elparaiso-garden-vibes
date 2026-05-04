@@ -32,6 +32,13 @@ export default function AdminLogin() {
       setInstallEvt(e as BIPEvent);
     };
     window.addEventListener("beforeinstallprompt", handler);
+    // notify if we got bounced here by the idle timeout
+    try {
+      if (sessionStorage.getItem("idle-logout") === "1") {
+        sessionStorage.removeItem("idle-logout");
+        toast.info("You were signed out after 5 minutes of inactivity. Please sign in again.");
+      }
+    } catch { /* ignore */ }
     return () => window.removeEventListener("beforeinstallprompt", handler);
   }, []);
 

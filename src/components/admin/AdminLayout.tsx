@@ -42,11 +42,27 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
   }, [loading, isAuthenticated, navigate]);
 
-  // Auth guard
+  // Auth guard — show a lightweight skeleton (not a blank screen) while
+  // the session is being resolved so the UI feels instant.
   if (loading || !isAuthenticated) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
+      <div className="min-h-screen bg-background flex">
+        <aside className="hidden lg:flex w-60 flex-col border-r border-border bg-card shrink-0 animate-pulse">
+          <div className="h-16 border-b border-border" />
+          <div className="p-3 space-y-2">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="h-9 rounded-lg bg-muted/40" />
+            ))}
+          </div>
+        </aside>
+        <div className="flex-1 flex flex-col">
+          <div className="h-14 border-b border-border bg-card" />
+          <div className="p-6 space-y-4 animate-pulse">
+            <div className="h-8 w-48 bg-muted/40 rounded" />
+            <div className="h-32 bg-muted/30 rounded-xl" />
+            <div className="h-64 bg-muted/20 rounded-xl" />
+          </div>
+        </div>
       </div>
     );
   }

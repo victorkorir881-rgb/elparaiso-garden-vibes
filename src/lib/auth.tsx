@@ -121,6 +121,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState({ user: null, session: null, loading: false, isAuthenticated: false });
   }, []);
 
+  // ── 5-minute idle timeout ───────────────────────────────────────────────
+  // when the user is signed in, watch for activity (mouse, keyboard, touch,
+  // scroll, route changes). after 5 minutes with no activity, sign them out
+  // and let the route guard kick them back to /admin/login.
+  useEffect(() => {
+    if (!state.isAuthenticated) return;
+    const IDLE_MS = 5 * 60 * 1000;
+    let timer: ReturnType<typeof setTimeout>;
+    const reset = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        void supabase.auth.signOut().then(() => {
+          setState({ user: null, session: null, loading: false, isAuthenticated: false });
+          if (typeof window !== "undefined") {
+            // notify the user once via a session flag so reloads don't spam it
+            try { sessionStorage.setItem("idle-logout", "1"); } catch { /* ignore */ }
+          }
+        });
+      }, IDLE_MS);
+    };
+    const events = ["mousemove", "mousedown", "keydown", "touchstart", "scroll", "visibilitychange"];
+    events.forEach((e) => window.addEventListener(e, reset, { passive: true }));
+    reset();
+    return () => {
+      clearTimeout(timer);
+      events.forEach((e) => window.removeEventListener(e, reset));
+    };
+  }, [state.isAuthenticated]);
+
   const refresh = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
     await loadUser(session);

@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Loader2, ShoppingCart, Trash2, Plus, Minus, Check, Home, UtensilsCrossed, MapPin, CalendarDays, Phone, Smartphone, X } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
+import PublicLayout from "@/components/public/PublicLayout";
 
 export default function OrderPage() {
   const { data: categories = [] } = useMenuCategories(true);
@@ -167,7 +168,8 @@ export default function OrderPage() {
 
   if (orderPlaced) {
     return (
-      <div className="min-h-screen bg-background py-8 sm:py-12 px-3 sm:px-4">
+      <PublicLayout>
+      <div className="bg-background py-8 sm:py-12 px-3 sm:px-4">
         <div className="max-w-2xl mx-auto text-center">
           <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <Check className="w-8 h-8 text-green-600" />
@@ -203,11 +205,13 @@ export default function OrderPage() {
           </div>
         </div>
       </div>
+      </PublicLayout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background py-6 sm:py-12 px-3 sm:px-4">
+    <PublicLayout>
+    <div className="bg-background py-6 sm:py-12 px-3 sm:px-4">
       <div className="max-w-7xl mx-auto">
         {/* Page navigation buttons */}
         <nav aria-label="Order page navigation" className="mb-6 flex flex-wrap gap-2">
@@ -416,6 +420,7 @@ export default function OrderPage() {
         </div>
       )}
     </div>
+    </PublicLayout>
   );
 }
 

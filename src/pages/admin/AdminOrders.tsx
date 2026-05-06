@@ -7,8 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Trash2, Edit2, Eye } from "lucide-react";
+import { Loader2, Trash2, Edit2, Eye, Download } from "lucide-react";
 import { toast } from "sonner";
+import { downloadCsv } from "@/lib/csv-export";
 
 const statusOptions = ["pending", "confirmed", "preparing", "ready", "out-for-delivery", "completed", "cancelled"];
 const orderTypeOptions = ["dine-in", "takeaway", "delivery"];
@@ -79,9 +80,32 @@ export default function AdminOrders() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold font-display mb-2">Orders Management</h1>
-        <p className="text-foreground/60">Manage customer orders and track delivery status</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold font-display mb-2">Orders Management</h1>
+          <p className="text-foreground/60">Manage customer orders and track delivery status</p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={filteredOrders.length === 0}
+          onClick={() =>
+            downloadCsv("orders", filteredOrders, [
+              { header: "Created", value: (o: any) => o.created_at },
+              { header: "Order #", value: (o: any) => o.order_number },
+              { header: "Customer", value: (o: any) => o.customer_name },
+              { header: "Phone", value: (o: any) => o.customer_phone },
+              { header: "Type", value: (o: any) => o.order_type },
+              { header: "Status", value: (o: any) => o.status },
+              { header: "Total (KES)", value: (o: any) => o.total_amount },
+              { header: "Items", value: (o: any) => Array.isArray(o.items) ? o.items.map((i: any) => `${i.name} x${i.quantity}`).join("; ") : "" },
+              { header: "Address", value: (o: any) => o.delivery_address ?? "" },
+              { header: "Notes", value: (o: any) => o.admin_notes ?? "" },
+            ])
+          }
+        >
+          <Download className="w-4 h-4 mr-2" /> Export CSV
+        </Button>
       </div>
 
       {stats && (

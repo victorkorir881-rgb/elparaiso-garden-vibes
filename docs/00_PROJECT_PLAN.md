@@ -127,9 +127,9 @@ External Supabase is the production database. **Every schema change ships as a n
 - [x] Orders manager
 - [ ] **4.1** Re-verify all admin pages after Phase 0 migration.
 - [x] **4.2** Add **Admin Audit Log viewer** — surfaces `admin_activity_log` at `/admin/audit-log` with filters (action, table, admin, date range), search, paginated table, JSON diff dialog, and CSV export. (done: 2026-04-30)
-- [ ] **4.3** Add **Analytics dashboard** — orders/revenue per day, top menu items, reservation conversion rate, peak hours heatmap.
-- [ ] **4.4** Add **Bulk actions** on Menu, Gallery, Messages (multi-select + delete/toggle).
-- [ ] **4.5** Add **CSV export** on Reservations, Orders, Messages, Contact submissions.
+- [x] **4.3** Add **Analytics dashboard** — `/admin/analytics` with selectable 7/14/30/90-day window. KPI cards (orders, paid revenue, AOV, reservation confirmation rate), daily orders+revenue line chart, top 10 menu items (by qty parsed from `orders.items` JSON), and 24h peak-hours stacked bar (orders + reservations). Computed client-side from existing hooks — no schema changes. (done: 2026-05-06)
+- [x] **4.4** Add **Bulk actions** on Menu, Gallery, Messages. (done: 2026-05-06 — shared `BulkActionBar` component; Menu: bulk availability + delete with select-all; Gallery: bulk feature/unfeature + delete; Messages: bulk mark read/unread + delete. All bulk ops use `Promise.allSettled` with per-row error reporting.)
+- [x] **4.5** Add **CSV export** on Reservations, Orders, Messages. (done: 2026-05-06 — added `src/lib/csv-export.ts` helper with formula-injection escaping + UTF-8 BOM; "Export CSV" button on each admin page exports the currently filtered rows. Contact submissions covered by Messages export.)
 - [ ] **4.6** Add **Image optimization pipeline** — auto-resize uploads, generate WebP, store thumbnail variant.
 - [ ] **4.7** Add **Notification center** — bell icon with unread reservations/orders/messages badge + real-time updates via Supabase Realtime.
 - [ ] **4.8** Add **Staff scheduling** module (optional v2 — shifts, roles per shift).

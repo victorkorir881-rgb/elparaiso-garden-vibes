@@ -1,13 +1,14 @@
-import { useState, useRef } from "react";
-import { Plus, Pencil, Trash2, Star, Eye, EyeOff, Search } from "lucide-react";
+import { useState } from "react";
+import { Plus, Pencil, Trash2, Star, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { BulkActionBar } from "@/components/admin/BulkActionBar";
 import { toast } from "sonner";
 import {
   useMenuCategories, useMenuItems,
@@ -34,6 +35,8 @@ export default function AdminMenu() {
   const [editItem, setEditItem] = useState<ItemForm>(defaultItemForm());
   const [editCat, setEditCat] = useState({ id: "", name: "", description: "" });
   const [deleteConfirm, setDeleteConfirm] = useState<{ type: "item" | "cat"; id: string } | null>(null);
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
 
   const { data: categories } = useMenuCategories(false);
   const { data: items } = useMenuItems({ categoryId: activeCatId ?? undefined, search: search || undefined });
@@ -81,6 +84,32 @@ export default function AdminMenu() {
     setItemDialog(true);
   };
 
+  const togglePick = (id: string) =>
+    setPicked((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  const clearPicked = () => setPicked(new Set());
+  const allPicked = !!items && items.length > 0 && items.every((i) => picked.has(i.id));
+  const togglePickAll = () => setPicked(allPicked ? new Set() : new Set((items ?? []).map((i) => i.id)));
+
+  const bulkSetAvailability = async (value: boolean) => {
+    const ids = Array.from(picked);
+    await Promise.allSettled(ids.map((id) => updateItem.mutateAsync({ id, is_available: value })));
+    toast.success(`${value ? "Enabled" : "Disabled"} ${ids.length} item${ids.length > 1 ? "s" : ""}`);
+    clearPicked();
+  };
+  const bulkDelete = async () => {
+    const ids = Array.from(picked);
+    const results = await Promise.allSettled(ids.map((id) => deleteItem.mutateAsync(id)));
+    const failed = results.filter((r) => r.status === "rejected").length;
+    if (failed) toast.error(`${failed} of ${ids.length} failed to delete`);
+    else toast.success(`Deleted ${ids.length} item${ids.length > 1 ? "s" : ""}`);
+    clearPicked();
+    setBulkDeleteConfirm(false);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -125,11 +154,26 @@ export default function AdminMenu() {
         <Input placeholder="Search items..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10 bg-card border-border text-foreground placeholder:text-muted-foreground" />
       </div>
 
+      <BulkActionBar count={picked.size} onClear={clearPicked}>
+        <Button variant="outline" size="sm" className="border-border text-foreground hover:bg-accent" onClick={() => bulkSetAvailability(true)}>
+          Make available
+        </Button>
+        <Button variant="outline" size="sm" className="border-border text-foreground hover:bg-accent" onClick={() => bulkSetAvailability(false)}>
+          Make unavailable
+        </Button>
+        <Button variant="destructive" size="sm" onClick={() => setBulkDeleteConfirm(true)}>
+          <Trash2 className="w-4 h-4 mr-1" /> Delete
+        </Button>
+      </BulkActionBar>
+
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
+                <th className="px-4 py-3 w-8">
+                  <Checkbox checked={!!allPicked} onCheckedChange={togglePickAll} aria-label="Select all" />
+                </th>
                 <th className="text-left px-4 py-3 text-muted-foreground font-medium">Item</th>
                 <th className="text-left px-4 py-3 text-muted-foreground font-medium hidden md:table-cell">Category</th>
                 <th className="text-left px-4 py-3 text-muted-foreground font-medium">Price</th>
@@ -140,7 +184,10 @@ export default function AdminMenu() {
             </thead>
             <tbody>
               {items?.map((item) => (
-                <tr key={item.id} className="border-b border-border last:border-0 hover:bg-accent/30 transition-colors">
+                <tr key={item.id} className={`border-b border-border last:border-0 hover:bg-accent/30 transition-colors ${picked.has(item.id) ? "bg-primary/5" : ""}`}>
+                  <td className="px-4 py-3">
+                    <Checkbox checked={picked.has(item.id)} onCheckedChange={() => togglePick(item.id)} aria-label={`Select ${item.name}`} />
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <img src={item.image_url ?? FOOD_PLACEHOLDER} alt={item.name} className="w-10 h-10 rounded-lg object-cover" />
@@ -174,7 +221,7 @@ export default function AdminMenu() {
                 </tr>
               ))}
               {(!items || items.length === 0) && (
-                <tr><td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">No items found. Add your first menu item.</td></tr>
+                <tr><td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">No items found. Add your first menu item.</td></tr>
               )}
             </tbody>
           </table>
@@ -270,6 +317,17 @@ export default function AdminMenu() {
               if (deleteConfirm.type === "item") deleteItem.mutate(deleteConfirm.id, { onSuccess: () => { setDeleteConfirm(null); toast.success("Item deleted"); } });
               else deleteCat.mutate(deleteConfirm.id, { onSuccess: () => { setDeleteConfirm(null); toast.success("Category deleted"); } });
             }}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkDeleteConfirm} onOpenChange={setBulkDeleteConfirm}>
+        <DialogContent className="bg-card border-border text-foreground max-w-sm">
+          <DialogHeader><DialogTitle>Delete {picked.size} items?</DialogTitle></DialogHeader>
+          <p className="text-muted-foreground text-sm">This action cannot be undone.</p>
+          <DialogFooter>
+            <Button variant="outline" className="border-border text-foreground hover:bg-accent" onClick={() => setBulkDeleteConfirm(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={bulkDelete}>Delete all</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

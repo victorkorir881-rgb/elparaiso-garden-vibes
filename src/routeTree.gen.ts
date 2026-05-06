@@ -36,6 +36,7 @@ import { Route as AdminGalleryRouteImport } from './routes/admin/gallery'
 import { Route as AdminEventsRouteImport } from './routes/admin/events'
 import { Route as AdminBusinessRulesRouteImport } from './routes/admin/business-rules'
 import { Route as AdminAuditLogRouteImport } from './routes/admin/audit-log'
+import { Route as AdminAnalyticsRouteImport } from './routes/admin/analytics'
 
 const TrackRoute = TrackRouteImport.update({
   id: '/track',
@@ -172,6 +173,11 @@ const AdminAuditLogRoute = AdminAuditLogRouteImport.update({
   path: '/audit-log',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminAnalyticsRoute = AdminAnalyticsRouteImport.update({
+  id: '/analytics',
+  path: '/analytics',
+  getParentRoute: () => AdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -187,6 +193,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/track': typeof TrackRoute
+  '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/audit-log': typeof AdminAuditLogRoute
   '/admin/business-rules': typeof AdminBusinessRulesRoute
   '/admin/events': typeof AdminEventsRoute
@@ -215,6 +222,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/track': typeof TrackRoute
+  '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/audit-log': typeof AdminAuditLogRoute
   '/admin/business-rules': typeof AdminBusinessRulesRoute
   '/admin/events': typeof AdminEventsRoute
@@ -245,6 +253,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/track': typeof TrackRoute
+  '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/audit-log': typeof AdminAuditLogRoute
   '/admin/business-rules': typeof AdminBusinessRulesRoute
   '/admin/events': typeof AdminEventsRoute
@@ -276,6 +285,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/terms'
     | '/track'
+    | '/admin/analytics'
     | '/admin/audit-log'
     | '/admin/business-rules'
     | '/admin/events'
@@ -304,6 +314,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/terms'
     | '/track'
+    | '/admin/analytics'
     | '/admin/audit-log'
     | '/admin/business-rules'
     | '/admin/events'
@@ -333,6 +344,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/terms'
     | '/track'
+    | '/admin/analytics'
     | '/admin/audit-log'
     | '/admin/business-rules'
     | '/admin/events'
@@ -556,10 +568,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAuditLogRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/analytics': {
+      id: '/admin/analytics'
+      path: '/analytics'
+      fullPath: '/admin/analytics'
+      preLoaderRoute: typeof AdminAnalyticsRouteImport
+      parentRoute: typeof AdminRoute
+    }
   }
 }
 
 interface AdminRouteChildren {
+  AdminAnalyticsRoute: typeof AdminAnalyticsRoute
   AdminAuditLogRoute: typeof AdminAuditLogRoute
   AdminBusinessRulesRoute: typeof AdminBusinessRulesRoute
   AdminEventsRoute: typeof AdminEventsRoute
@@ -577,6 +597,7 @@ interface AdminRouteChildren {
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
+  AdminAnalyticsRoute: AdminAnalyticsRoute,
   AdminAuditLogRoute: AdminAuditLogRoute,
   AdminBusinessRulesRoute: AdminBusinessRulesRoute,
   AdminEventsRoute: AdminEventsRoute,

@@ -428,15 +428,32 @@ export function useOrdersByPhone(phone: string) {
   return useQuery({
     queryKey: ["orders", "phone", phone],
     queryFn: async () => {
+      // Match any common variant of a Kenyan phone number so a user who
+      // searches "0712345678" still finds an order saved as "+254712345678"
+      // or "254712345678".
+      const digits = phone.replace(/\D/g, "");
+      const variants = new Set<string>([phone, digits]);
+      if (/^0[17]\d{8}$/.test(digits)) {
+        variants.add("254" + digits.slice(1));
+        variants.add("+254" + digits.slice(1));
+      } else if (/^254[17]\d{8}$/.test(digits)) {
+        variants.add("0" + digits.slice(3));
+        variants.add("+" + digits);
+      } else if (/^[17]\d{8}$/.test(digits)) {
+        variants.add("0" + digits);
+        variants.add("254" + digits);
+        variants.add("+254" + digits);
+      }
+      const list = Array.from(variants).filter(Boolean);
       const { data, error } = await supabase
         .from("orders")
         .select("*")
-        .eq("customer_phone", phone)
+        .in("customer_phone", list)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
     },
-    enabled: phone.length > 0,
+    enabled: phone.replace(/\D/g, "").length >= 9,
   });
 }
 

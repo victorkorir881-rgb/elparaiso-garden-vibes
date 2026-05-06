@@ -1,18 +1,23 @@
 import { useState } from "react";
-import { Mail, MailOpen, Trash2, Phone, Search } from "lucide-react";
+import { Mail, MailOpen, Trash2, Phone, Search, Download, CheckSquare } from "lucide-react";
+import { downloadCsv } from "@/lib/csv-export";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useContactMessages, useUpdateContactMessage, useDeleteContactMessage } from "@/lib/supabase-hooks";
+import { BulkActionBar } from "@/components/admin/BulkActionBar";
 
 export default function AdminMessages() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [selected, setSelected] = useState<any | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
 
   const { data: messages, isLoading } = useContactMessages({
     isRead: filter === "unread" ? false : undefined,
@@ -26,6 +31,31 @@ export default function AdminMessages() {
     if (!msg.is_read) markRead.mutate({ id: msg.id, is_read: true });
   };
 
+  const togglePick = (id: string) =>
+    setPicked((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  const clearPicked = () => setPicked(new Set());
+
+  const bulkMarkRead = async (value: boolean) => {
+    const ids = Array.from(picked);
+    await Promise.allSettled(ids.map((id) => markRead.mutateAsync({ id, is_read: value })));
+    toast.success(`Marked ${ids.length} as ${value ? "read" : "unread"}`);
+    clearPicked();
+  };
+
+  const bulkDelete = async () => {
+    const ids = Array.from(picked);
+    const results = await Promise.allSettled(ids.map((id) => del.mutateAsync(id)));
+    const failed = results.filter((r) => r.status === "rejected").length;
+    if (failed) toast.error(`${failed} of ${ids.length} failed to delete`);
+    else toast.success(`Deleted ${ids.length} message${ids.length > 1 ? "s" : ""}`);
+    clearPicked();
+    setBulkDeleteConfirm(false);
+  };
+
   const unreadCount = messages?.filter((m) => !m.is_read).length ?? 0;
 
   return (
@@ -34,9 +64,28 @@ export default function AdminMessages() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Messages</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            {unreadCount > 0 ? <span className="text-primary font-medium">{unreadCount} unread</span> : "All messages read"} · {messages?.length ?? 0} total
+          {unreadCount > 0 ? <span className="text-primary font-medium">{unreadCount} unread</span> : "All messages read"} · {messages?.length ?? 0} total
           </p>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="border-border text-foreground hover:bg-accent"
+          disabled={!messages || messages.length === 0}
+          onClick={() =>
+            downloadCsv("messages", messages ?? [], [
+              { header: "Received", value: (m) => m.created_at },
+              { header: "Name", value: "name" },
+              { header: "Email", value: "email" },
+              { header: "Phone", value: (m) => m.phone ?? "" },
+              { header: "Inquiry Type", value: (m) => m.inquiry_type ?? "" },
+              { header: "Read", value: (m) => (m.is_read ? "yes" : "no") },
+              { header: "Message", value: "message" },
+            ])
+          }
+        >
+          <Download className="w-4 h-4 mr-2" /> Export CSV
+        </Button>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
@@ -53,6 +102,18 @@ export default function AdminMessages() {
         </Select>
       </div>
 
+      <BulkActionBar count={picked.size} onClear={clearPicked}>
+        <Button variant="outline" size="sm" className="border-border text-foreground hover:bg-accent" onClick={() => bulkMarkRead(true)}>
+          <MailOpen className="w-4 h-4 mr-1" /> Mark read
+        </Button>
+        <Button variant="outline" size="sm" className="border-border text-foreground hover:bg-accent" onClick={() => bulkMarkRead(false)}>
+          <Mail className="w-4 h-4 mr-1" /> Mark unread
+        </Button>
+        <Button variant="destructive" size="sm" onClick={() => setBulkDeleteConfirm(true)}>
+          <Trash2 className="w-4 h-4 mr-1" /> Delete
+        </Button>
+      </BulkActionBar>
+
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         {isLoading ? (
           <div className="p-8 text-center text-muted-foreground">Loading...</div>
@@ -61,9 +122,12 @@ export default function AdminMessages() {
             {messages.map((msg) => (
               <div
                 key={msg.id}
-                className={`flex items-start gap-4 px-4 py-4 cursor-pointer hover:bg-accent/20 transition-colors ${!msg.is_read ? "bg-primary/5" : ""}`}
+                className={`flex items-start gap-4 px-4 py-4 cursor-pointer hover:bg-accent/20 transition-colors ${!msg.is_read ? "bg-primary/5" : ""} ${picked.has(msg.id) ? "ring-1 ring-primary/40" : ""}`}
                 onClick={() => openMessage(msg)}
               >
+                <div onClick={(e) => e.stopPropagation()} className="mt-1 shrink-0">
+                  <Checkbox checked={picked.has(msg.id)} onCheckedChange={() => togglePick(msg.id)} />
+                </div>
                 <div className={`mt-1 shrink-0 ${!msg.is_read ? "text-primary" : "text-muted-foreground"}`}>
                   {msg.is_read ? <MailOpen className="w-4 h-4" /> : <Mail className="w-4 h-4" />}
                 </div>
@@ -158,6 +222,17 @@ export default function AdminMessages() {
           <div className="flex gap-2 mt-4">
             <Button variant="outline" className="flex-1 border-border text-foreground hover:bg-accent" onClick={() => setDeleteConfirm(null)}>Cancel</Button>
             <Button variant="destructive" className="flex-1" onClick={() => deleteConfirm && del.mutate(deleteConfirm, { onSuccess: () => { setDeleteConfirm(null); toast.success("Message deleted"); } })}>Delete</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkDeleteConfirm} onOpenChange={setBulkDeleteConfirm}>
+        <DialogContent className="bg-card border-border text-foreground max-w-sm">
+          <DialogHeader><DialogTitle>Delete {picked.size} messages?</DialogTitle></DialogHeader>
+          <p className="text-muted-foreground text-sm">This action cannot be undone.</p>
+          <div className="flex gap-2 mt-4">
+            <Button variant="outline" className="flex-1 border-border text-foreground hover:bg-accent" onClick={() => setBulkDeleteConfirm(false)}>Cancel</Button>
+            <Button variant="destructive" className="flex-1" onClick={bulkDelete}>Delete all</Button>
           </div>
         </DialogContent>
       </Dialog>

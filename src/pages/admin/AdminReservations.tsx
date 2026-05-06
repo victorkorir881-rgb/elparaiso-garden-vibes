@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Search, Phone, MessageSquare, Trash2, Clock, Users } from "lucide-react";
+import { Search, Phone, MessageSquare, Trash2, Clock, Users, Download } from "lucide-react";
+import { downloadCsv } from "@/lib/csv-export";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -54,9 +55,32 @@ export default function AdminReservations() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Reservations</h1>
-        <p className="text-muted-foreground text-sm mt-1">Manage table reservations and bookings</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Reservations</h1>
+          <p className="text-muted-foreground text-sm mt-1">Manage table reservations and bookings</p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="border-border text-foreground hover:bg-accent"
+          disabled={!reservations || reservations.length === 0}
+          onClick={() =>
+            downloadCsv("reservations", reservations ?? [], [
+              { header: "Created", value: (r) => r.created_at },
+              { header: "Name", value: "name" },
+              { header: "Phone", value: "phone" },
+              { header: "Email", value: (r) => (r as any).email ?? "" },
+              { header: "Date", value: "date" },
+              { header: "Time", value: "time" },
+              { header: "Party Size", value: "party_size" },
+              { header: "Status", value: "status" },
+              { header: "Notes", value: (r) => r.notes ?? "" },
+            ])
+          }
+        >
+          <Download className="w-4 h-4 mr-2" /> Export CSV
+        </Button>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

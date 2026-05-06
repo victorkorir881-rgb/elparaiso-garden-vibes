@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Phone, Clock, MapPin, CheckCircle2, AlertCircle } from "lucide-react";
+import PublicLayout from "@/components/public/PublicLayout";
 
 const statusColors: Record<string, { bg: string; text: string; icon: React.ReactNode }> = {
   pending: { bg: "bg-yellow-50", text: "text-yellow-700", icon: <Clock className="w-5 h-5" /> },
@@ -23,6 +24,8 @@ const statusLabels: Record<string, string> = {
 };
 
 export default function OrderTrackingPage() {
+  const [phoneInput, setPhoneInput] = useState("");
+  const [orderNumberInput, setOrderNumberInput] = useState("");
   const [phone, setPhone] = useState("");
   const [orderNumber, setOrderNumber] = useState("");
   const [searchType, setSearchType] = useState<"phone" | "number">("phone");
@@ -31,11 +34,17 @@ export default function OrderTrackingPage() {
   const trackByNumber = useOrderByNumber(searchType === "number" ? orderNumber : "");
 
   const orders = (searchType === "phone" ? trackByPhone.data : trackByNumber.data) as any[] | undefined;
-  const isLoading = searchType === "phone" ? trackByPhone.isLoading : trackByNumber.isLoading;
+  const isLoading = searchType === "phone" ? trackByPhone.isFetching : trackByNumber.isFetching;
   const error = searchType === "phone" ? trackByPhone.error : trackByNumber.error;
 
+  const submit = () => {
+    if (searchType === "phone") setPhone(phoneInput.trim());
+    else setOrderNumber(orderNumberInput.trim());
+  };
+
   return (
-    <div className="min-h-screen bg-background py-12 px-4">
+    <PublicLayout>
+    <div className="bg-background py-12 px-4">
       <div className="max-w-2xl mx-auto">
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold font-display mb-4">Track Your Order</h1>
@@ -43,28 +52,28 @@ export default function OrderTrackingPage() {
         </div>
 
         <div className="flex gap-4 mb-8">
-          <button onClick={() => { setSearchType("phone"); setOrderNumber(""); }} className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all ${searchType === "phone" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground hover:bg-muted/80"}`}>
+          <button onClick={() => { setSearchType("phone"); setOrderNumberInput(""); setOrderNumber(""); }} className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all ${searchType === "phone" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground hover:bg-muted/80"}`}>
             <Phone className="w-4 h-4 inline mr-2" /> By Phone
           </button>
-          <button onClick={() => { setSearchType("number"); setPhone(""); }} className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all ${searchType === "number" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground hover:bg-muted/80"}`}>
+          <button onClick={() => { setSearchType("number"); setPhoneInput(""); setPhone(""); }} className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all ${searchType === "number" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground hover:bg-muted/80"}`}>
             By Order #
           </button>
         </div>
 
-        <div className="mb-12">
+        <form onSubmit={(e) => { e.preventDefault(); submit(); }} className="mb-12">
           <div className="flex gap-2">
             <Input
               type={searchType === "phone" ? "tel" : "text"}
-              placeholder={searchType === "phone" ? "Enter your phone number" : "Enter order number (e.g., ORD-20260404-ABC12)"}
-              value={searchType === "phone" ? phone : orderNumber}
-              onChange={(e) => { if (searchType === "phone") setPhone(e.target.value); else setOrderNumber(e.target.value); }}
+              placeholder={searchType === "phone" ? "Enter your phone number (e.g. 0712345678)" : "Enter order number (e.g., ORD-20260404-ABC12)"}
+              value={searchType === "phone" ? phoneInput : orderNumberInput}
+              onChange={(e) => { if (searchType === "phone") setPhoneInput(e.target.value); else setOrderNumberInput(e.target.value); }}
               className="flex-1"
             />
-            <Button disabled={isLoading || (searchType === "phone" ? !phone : !orderNumber)}>
+            <Button type="submit" disabled={isLoading || (searchType === "phone" ? !phoneInput.trim() : !orderNumberInput.trim())}>
               {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Search"}
             </Button>
           </div>
-        </div>
+        </form>
 
         {isLoading && (
           <div className="text-center py-12">
@@ -169,5 +178,6 @@ export default function OrderTrackingPage() {
         </div>
       </div>
     </div>
+    </PublicLayout>
   );
 }

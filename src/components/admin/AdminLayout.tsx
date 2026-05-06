@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard, UtensilsCrossed, CalendarCheck, PartyPopper,
   Images, MessageSquare, Settings, Search, Users, Menu, X,
-  LogOut, ChevronRight, Star, Bell, Package, Sliders, ScrollText
+  LogOut, ChevronRight, Star, Bell, Package, Sliders, ScrollText, BarChart3
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import { toast } from "sonner";
 
 const navItems = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
+  { to: "/admin/analytics", label: "Analytics", icon: BarChart3 },
   { to: "/admin/menu", label: "Menu Manager", icon: UtensilsCrossed },
   { to: "/admin/orders", label: "Orders", icon: Package },
   { to: "/admin/reservations", label: "Reservations", icon: CalendarCheck },

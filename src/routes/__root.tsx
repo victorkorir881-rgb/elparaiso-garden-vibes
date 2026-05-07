@@ -1,4 +1,5 @@
-import { createRootRoute, Outlet } from "@tanstack/react-router";
+import { createRootRoute, Outlet, useRouterState } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { SITE_URL } from "@/lib/site-url";
 
 export const Route = createRootRoute({

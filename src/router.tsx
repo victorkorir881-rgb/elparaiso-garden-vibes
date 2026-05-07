@@ -23,7 +23,10 @@ export function createRouter() {
     defaultPreload: "intent",
     // keep preloaded data warm for 60s so the click after preload is instant
     defaultPreloadStaleTime: 60 * 1000,
+    // always start a new page scrolled to top — no flash of scrolled-down content
     scrollRestoration: true,
+    scrollRestorationBehavior: "instant",
+    getScrollRestorationKey: (location) => location.pathname,
   });
   return router;
 }

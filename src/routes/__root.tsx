@@ -1,4 +1,5 @@
-import { createRootRoute, Outlet } from "@tanstack/react-router";
+import { createRootRoute, Outlet, useRouterState } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { SITE_URL } from "@/lib/site-url";
 
 export const Route = createRootRoute({
@@ -26,6 +27,12 @@ export const Route = createRootRoute({
 });
 
 function RootComponent() {
+  // force scroll to top on every route change so a new page never appears
+  // mid-scroll just because the previous page was scrolled down.
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" as ScrollBehavior });
+  }, [pathname]);
   return <Outlet />;
 }
 

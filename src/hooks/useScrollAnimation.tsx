@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 
 interface ScrollAnimationOptions {
   threshold?: number;
@@ -6,16 +6,40 @@ interface ScrollAnimationOptions {
   once?: boolean;
 }
 
+// honor reduced motion + skip animation entirely on devices that prefer it,
+// so users see content instantly with no transition delay.
+const prefersReducedMotion = (): boolean => {
+  if (typeof window === "undefined" || !window.matchMedia) return false;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+};
+
 export function useScrollAnimation<T extends HTMLElement = HTMLDivElement>(
   options: ScrollAnimationOptions = {}
 ): [RefObject<T>, boolean] {
-  const { threshold = 0.15, rootMargin = "0px 0px -60px 0px", once = true } = options;
+  const { threshold = 0.05, rootMargin = "0px 0px 0px 0px", once = true } = options;
   const ref = useRef<T>(null!);
   const [isVisible, setIsVisible] = useState(false);
+
+  // synchronously mark as visible if the element is already in viewport on mount
+  // (above-the-fold content) so it never flashes blank waiting for the observer.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (prefersReducedMotion()) {
+      setIsVisible(true);
+      return;
+    }
+    const rect = el.getBoundingClientRect();
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+    if (rect.top < vh && rect.bottom > 0) {
+      setIsVisible(true);
+    }
+  }, []);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    if (prefersReducedMotion()) return;
 
     const observer = new IntersectionObserver(
       ([entry]) => {

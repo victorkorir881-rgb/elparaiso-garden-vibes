@@ -140,7 +140,7 @@ export default function HomePage() {
       <section className="section-padding bg-background">
         <div className="container">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            <ScrollReveal animation="fade-right">
+            <ScrollReveal animation="fade-up">
               <div>
                 <h2 className="section-title text-foreground mb-4">The Elparaiso Experience</h2>
                 <div className="gold-divider mb-6" />
@@ -153,7 +153,7 @@ export default function HomePage() {
                 </div>
               </div>
             </ScrollReveal>
-            <ScrollReveal animation="fade-left" delay={200}>
+            <ScrollReveal animation="fade-up" delay={200}>
               <div className="grid grid-cols-2 gap-3">
                 {["https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=400&q=80","https://images.unsplash.com/photo-1551024506-0bccd828d307?w=400&q=80","https://images.unsplash.com/photo-1470337458703-46ad1756a187?w=400&q=80","https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=400&q=80"].map((src, i) => (
                   <div key={i} className={`rounded-xl overflow-hidden ${i === 0 ? "row-span-2" : ""}`}><img src={src} alt="Elparaiso experience" className="w-full h-full object-cover" loading="lazy" style={{ minHeight: i === 0 ? "280px" : "130px" }} /></div>
@@ -273,7 +273,7 @@ export default function HomePage() {
             <p className="text-muted-foreground">{address}</p>
           </ScrollReveal>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-            <ScrollReveal animation="fade-right">
+            <ScrollReveal animation="fade-up">
               <div className="space-y-4">
                 <div className="bg-card border border-border rounded-xl p-6">
                   <h3 className="font-semibold text-foreground mb-4">Contact & Hours</h3>
@@ -285,7 +285,7 @@ export default function HomePage() {
                 </div>
               </div>
             </ScrollReveal>
-            <ScrollReveal animation="fade-left" delay={200}>
+            <ScrollReveal animation="fade-up" delay={200}>
               <div className="rounded-xl overflow-hidden border border-border h-72 bg-card">
                 {mapsEmbed ? <iframe src={mapsEmbed} width="100%" height="100%" style={{ border: 0 }} allowFullScreen loading="lazy" title="Elparaiso Location" /> : (
                   <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-2"><MapPin className="w-8 h-8 text-primary" /><p className="text-sm">{address}</p><a href={mapsLink} target="_blank" rel="noopener noreferrer" className="text-primary text-sm hover:underline">Open in Google Maps</a></div>

@@ -22,7 +22,7 @@ export default function AboutPage() {
       <section className="section-padding bg-background">
         <div className="container">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center mb-20">
-            <ScrollReveal animation="fade-right">
+            <ScrollReveal animation="fade-up">
               <div>
                 <h2 className="section-title text-foreground mb-4">Our Story</h2>
                 <div className="gold-divider mb-6" />
@@ -37,7 +37,7 @@ export default function AboutPage() {
                 </p>
               </div>
             </ScrollReveal>
-            <ScrollReveal animation="fade-left" delay={200}>
+            <ScrollReveal animation="fade-up" delay={200}>
               <div className="rounded-2xl overflow-hidden h-96">
                 <img
                   src="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800&q=80"

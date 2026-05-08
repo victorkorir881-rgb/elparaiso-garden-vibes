@@ -1,6 +1,5 @@
 import { createRootRoute, Outlet, useRouterState } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { SITE_URL } from "@/lib/site-url";
 
 export const Route = createRootRoute({
   head: () => ({
@@ -13,11 +12,10 @@ export const Route = createRootRoute({
       { property: "og:site_name", content: "Elparaiso Garden Kisii" },
       { property: "og:type", content: "website" },
       { property: "og:locale", content: "en_KE" },
-      { property: "og:url", content: SITE_URL },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:site", content: "@elparaisogardens" },
     ],
     links: [
-      { rel: "canonical", href: SITE_URL },
       { rel: "icon", href: "/favicon.ico" },
     ],
   }),

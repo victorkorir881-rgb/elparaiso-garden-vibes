@@ -12,7 +12,7 @@ type Props = {
   /** Subfolder inside the `media` bucket. */
   folder: string;
   label?: string;
-  /** Show an "or paste URL" input alongside the file picker. Default true. */
+  /** Show an "or paste URL" input alongside the file picker. Default false — admins upload from their device. */
   allowUrl?: boolean;
 };
 
@@ -26,7 +26,7 @@ export function ImageUploadField({
   onChange,
   folder,
   label = "Image",
-  allowUrl = true,
+  allowUrl = false,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);

@@ -57,7 +57,7 @@ After audit, the React app does NOT actually call tRPC for data — every page a
 - [ ] **0.22** Replace `src/index.css` with `src/styles.css` (Tailwind v4 + oklch tokens). (deferred — Tailwind v3 in use; revisit when upgrading)
 - [x] **0.23** Remove dead deps: `@trpc/*`, `express`, `drizzle-*`, `wouter`, `vite-plugin-manus-runtime`, `@builder.io/vite-plugin-jsx-loc`. (done: 2026-04-30)
 - [ ] **0.24** Rewrite `server/*.test.ts` against Supabase hooks / server functions (or delete if obsolete). (pending)
-- [ ] **0.25** Update `README.md` with new structure diagram + run instructions. (pending)
+- [x] **0.25** Update `README.md` with new structure diagram + run instructions. (done 2026-05-08)
 
 **Definition of done for Phase 0:** Preview runs on `vite` only. No Express server, no tRPC, no Wouter, no Manus runtime. All data flows through Supabase or `createServerFn`.
 
@@ -131,7 +131,7 @@ External Supabase is the production database. **Every schema change ships as a n
 - [x] **4.4** Add **Bulk actions** on Menu, Gallery, Messages. (done: 2026-05-06 — shared `BulkActionBar` component; Menu: bulk availability + delete with select-all; Gallery: bulk feature/unfeature + delete; Messages: bulk mark read/unread + delete. All bulk ops use `Promise.allSettled` with per-row error reporting.)
 - [x] **4.5** Add **CSV export** on Reservations, Orders, Messages. (done: 2026-05-06 — added `src/lib/csv-export.ts` helper with formula-injection escaping + UTF-8 BOM; "Export CSV" button on each admin page exports the currently filtered rows. Contact submissions covered by Messages export.)
 - [x] **4.6** Add **Image optimization pipeline** — auto-resize uploads, generate WebP, store thumbnail variant. (done: 2026-05-08 — `sql/0011_media_storage.sql` provisions a public-read `media` bucket with admin-only write policies (gated by `public.is_admin_user()`). `src/lib/image-optimize.ts` does browser-side canvas resize (max 1600px edge, EXIF-aware via `createImageBitmap`) + WebP encoding (q=0.82) and a 400×400 square thumbnail (q=0.78). `src/lib/storage-upload.ts` uploads both variants in parallel with `cache-control: 31536000, immutable` and rolls back the main file if the thumbnail fails. `src/components/admin/ImageUploadField.tsx` is a drop-in field (file picker OR paste URL, live preview, % saved indicator) wired into AdminGallery (`folder="gallery"`), AdminMenu (`folder="menu"`), and AdminEvents (`folder="events"`). Apply migration `0011` and emails/SMS docs unaffected.)
-- [ ] **4.7** Add **Notification center** — bell icon with unread reservations/orders/messages badge + real-time updates via Supabase Realtime.
+- [x] **4.7** Add **Notification center** — bell icon with unread reservations/orders/messages badge + real-time updates via Supabase Realtime. (done — `src/components/admin/NotificationCenter.tsx`)
 - [ ] **4.8** Add **Staff scheduling** module (optional v2 — shifts, roles per shift).
 
 ---
@@ -156,14 +156,18 @@ External Supabase is the production database. **Every schema change ships as a n
 
 ---
 
-## Phase 7 — Payments (M-Pesa via Flutterwave)
+## Phase 7 — Payments (M-Pesa via Daraja STK Push)
 
-- [ ] **7.1** `/sql/0004_payments.sql` — payments table with status, provider, reference, amount, currency, idempotency_key.
-- [ ] **7.2** Server function `initiateMpesaPayment` — call Flutterwave STK Push.
-- [ ] **7.3** Webhook route `src/routes/api/public/flutterwave-webhook.ts` — signature verification, update payment + order status.
-- [ ] **7.4** Add payment UI on Order checkout + Reservations deposit.
-- [ ] **7.5** Refund flow in Admin Orders manager.
+> Implementation switched from Flutterwave → **direct Daraja** (lower fees, no third-party dependency). Setup guide: `docs/07_PAYMENTS_MPESA.md`.
+
+- [x] **7.1** `sql/0003_payments.sql` — payments table with status, provider, reference, amount, currency, idempotency. (done)
+- [x] **7.2** Edge function `mpesa-initiate` — Daraja OAuth + STK Push. (done — `supabase/functions/mpesa-initiate/`)
+- [x] **7.3** Webhook `mpesa-callback` — signature/token verification, update payment + order status. (done — `supabase/functions/mpesa-callback/`)
+- [x] **7.4** Add payment UI on Order checkout. (done — `src/pages/public/OrderPage.tsx` + `src/lib/payments.ts`)
+- [ ] **7.4b** Add deposit payment on Reservations form. (pending)
+- [ ] **7.5** Automated refund flow in Admin Orders (Daraja Reversal API). Manual refunds work today.
 - [ ] **7.6** Reconciliation report in Admin Analytics.
+- [ ] **7.7** Owner step: deploy edge functions + set Daraja secrets per `docs/07_PAYMENTS_MPESA.md`.
 
 ---
 

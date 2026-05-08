@@ -43,6 +43,8 @@ export default function AboutPage() {
                   src="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800&q=80"
                   alt="Elparaiso Garden atmosphere"
                   className="w-full h-full object-cover"
+                  loading="lazy"
+                  decoding="async"
                 />
               </div>
             </ScrollReveal>

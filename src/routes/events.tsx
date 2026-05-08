@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import EventsPage from "@/pages/public/EventsPage";
+import { OG_IMAGES } from "@/lib/og-images";
+import { siteUrl } from "@/lib/site-url";
 
 export const Route = createFileRoute("/events")({
   head: () => ({
@@ -8,7 +10,10 @@ export const Route = createFileRoute("/events")({
       { name: "description", content: "Upcoming events, live music, themed nights and special offers." },
       { property: "og:title", content: "Events — Elparaiso Garden Kisii" },
       { property: "og:description", content: "Upcoming events, live music, themed nights and special offers." },
+      { property: "og:image", content: OG_IMAGES.events },
+      { name: "twitter:image", content: OG_IMAGES.events },
     ],
+    links: [{ rel: "canonical", href: siteUrl("/events") }],
   }),
   component: EventsPage,
 });

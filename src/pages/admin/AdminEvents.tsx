@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { useEvents, useCreateEvent, useUpdateEvent, useDeleteEvent } from "@/lib/supabase-hooks";
+import { ImageUploadField } from "@/components/admin/ImageUploadField";
 
 type EventForm = {
   id?: string; title: string; description: string; eventDate: string;
@@ -134,10 +135,12 @@ export default function AdminEvents() {
                 <Input type="time" value={form.endTime} onChange={(e) => setForm((p) => ({ ...p, endTime: e.target.value }))} className="bg-input border-border text-foreground mt-1" />
               </div>
             </div>
-            <div>
-              <Label className="text-foreground">Image URL</Label>
-              <Input value={form.imageUrl ?? ""} onChange={(e) => setForm((p) => ({ ...p, imageUrl: e.target.value }))} className="bg-input border-border text-foreground mt-1" placeholder="https://..." />
-            </div>
+            <ImageUploadField
+              value={form.imageUrl ?? ""}
+              onChange={(url) => setForm((p) => ({ ...p, imageUrl: url }))}
+              folder="events"
+              label="Image"
+            />
             <div className="flex gap-6">
               <div className="flex items-center gap-2">
                 <Switch checked={form.isActive} onCheckedChange={(v) => setForm((p) => ({ ...p, isActive: v }))} />

@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import GalleryPage from "@/pages/public/GalleryPage";
+import { OG_IMAGES } from "@/lib/og-images";
+import { siteUrl } from "@/lib/site-url";
 
 export const Route = createFileRoute("/gallery")({
   head: () => ({
@@ -8,7 +10,10 @@ export const Route = createFileRoute("/gallery")({
       { name: "description", content: "Photos of our food, venue, events and atmosphere." },
       { property: "og:title", content: "Gallery — Elparaiso Garden Kisii" },
       { property: "og:description", content: "Photos of our food, venue, events and atmosphere." },
+      { property: "og:image", content: OG_IMAGES.gallery },
+      { name: "twitter:image", content: OG_IMAGES.gallery },
     ],
+    links: [{ rel: "canonical", href: siteUrl("/gallery") }],
   }),
   component: GalleryPage,
 });

@@ -3,13 +3,14 @@ import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard, UtensilsCrossed, CalendarCheck, PartyPopper,
   Images, MessageSquare, Settings, Search, Users, Menu, X,
-  LogOut, ChevronRight, Star, Bell, Package, Sliders, ScrollText, BarChart3
+  LogOut, ChevronRight, Star, Package, Sliders, ScrollText, BarChart3
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth";
 import { useUnreadMessageCount } from "@/lib/supabase-hooks";
 import { toast } from "sonner";
+import NotificationCenter from "./NotificationCenter";
 
 const navItems = [
   { to: "/admin", label: "Dashboard", icon: LayoutDashboard, exact: true },
@@ -182,14 +183,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <Menu className="w-5 h-5" />
           </Button>
           <div className="flex items-center gap-2 ml-auto">
-            <Link to="/admin/messages">
-              <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground">
-                <Bell className="w-4 h-4" />
-                {unreadCount && unreadCount > 0 && (
-                  <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500" />
-                )}
-              </Button>
-            </Link>
+            <NotificationCenter />
           </div>
         </header>
 

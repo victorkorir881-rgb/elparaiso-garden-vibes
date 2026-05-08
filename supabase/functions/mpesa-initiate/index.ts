@@ -17,6 +17,7 @@
 //   SUPABASE_SERVICE_ROLE_KEY (auto)
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { logger, withTimedLog } from "../_shared/logger.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -72,7 +73,7 @@ async function getAccessToken(env: string, key: string, secret: string) {
   return { token: data.access_token as string, base };
 }
 
-Deno.serve(async (req) => {
+Deno.serve((req) => withTimedLog("mpesa-initiate", async () => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -211,4 +212,4 @@ Deno.serve(async (req) => {
     console.error("mpesa-initiate error", e);
     return json({ error: (e as Error).message ?? "Server error" }, 500);
   }
-});
+}, { request_id: req.headers.get("x-request-id") ?? undefined }));

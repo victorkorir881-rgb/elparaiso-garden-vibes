@@ -33,6 +33,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
 
   return (
     <div className="min-h-screen flex flex-col bg-background text-foreground">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[60] focus:px-4 focus:py-2 focus:rounded-md focus:bg-primary focus:text-primary-foreground focus:shadow-lg">Skip to main content</a>
       <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${scrolled ? "bg-background/95 backdrop-blur-md shadow-lg border-b border-border" : "bg-transparent"}`}>
         <div className="container">
           <div className="flex items-center justify-between h-16 md:h-20 gap-4">
@@ -53,7 +54,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
               <Link to="/reservations"><Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90">Reserve a Table</Button></Link>
             </div>
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-              <SheetTrigger className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-md text-foreground hover:bg-accent"><Menu className="w-5 h-5" /></SheetTrigger>
+              <SheetTrigger aria-label="Open navigation menu" className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-md text-foreground hover:bg-accent"><Menu className="w-5 h-5" /></SheetTrigger>
               <SheetContent side="right" className="w-72 bg-card border-border p-0">
                 <div className="flex flex-col h-full">
                   <div className="flex items-center justify-between p-6 border-b border-border">
@@ -75,7 +76,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
           </div>
         </div>
       </header>
-      <main className="flex-1 pt-16 md:pt-20">{children}</main>
+      <main id="main-content" tabIndex={-1} className="flex-1 pt-16 md:pt-20 focus:outline-none">{children}</main>
       <footer className="bg-card border-t border-border mt-auto">
         <div className="container py-12">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">

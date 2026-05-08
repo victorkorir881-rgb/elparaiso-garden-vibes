@@ -275,7 +275,7 @@ export default function OrderPage() {
                   <Card key={item.id} className="overflow-hidden hover:border-primary/50 transition-colors">
                     {item.image_url && (
                       <div className="w-full h-40 bg-muted overflow-hidden">
-                        <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                        <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
                       </div>
                     )}
                     <div className="p-4">

@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { BulkActionBar } from "@/components/admin/BulkActionBar";
+import { ImageUploadField } from "@/components/admin/ImageUploadField";
 import { toast } from "sonner";
 import {
   useMenuCategories, useMenuItems,
@@ -258,10 +259,12 @@ export default function AdminMenu() {
               <Label className="text-foreground">Description</Label>
               <Textarea value={editItem.description} onChange={(e) => setEditItem((p) => ({ ...p, description: e.target.value }))} className="bg-input border-border text-foreground mt-1 resize-none" rows={2} placeholder="Brief description..." />
             </div>
-            <div>
-              <Label className="text-foreground">Image URL</Label>
-              <Input value={editItem.imageUrl ?? ""} onChange={(e) => setEditItem((p) => ({ ...p, imageUrl: e.target.value }))} className="bg-input border-border text-foreground mt-1" placeholder="https://..." />
-            </div>
+            <ImageUploadField
+              value={editItem.imageUrl ?? ""}
+              onChange={(url) => setEditItem((p) => ({ ...p, imageUrl: url }))}
+              folder="menu"
+              label="Image"
+            />
             <div className="flex gap-6">
               <div className="flex items-center gap-2">
                 <Switch checked={editItem.isAvailable} onCheckedChange={(v) => setEditItem((p) => ({ ...p, isAvailable: v }))} />

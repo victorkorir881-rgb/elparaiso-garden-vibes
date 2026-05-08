@@ -8,7 +8,11 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { CartProvider } from "./contexts/CartContext";
 import { AuthProvider } from "./lib/auth";
 import { createRouter, queryClient } from "./router";
+import { initSentry } from "./lib/sentry";
 import "./index.css";
+
+// Initialize Sentry as early as possible so errors during bootstrap are captured.
+initSentry();
 
 const router = createRouter();
 

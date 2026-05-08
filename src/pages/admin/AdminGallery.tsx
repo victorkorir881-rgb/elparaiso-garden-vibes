@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { toast } from "sonner";
 import { useGalleryImages, useCreateGalleryImage, useUpdateGalleryImage, useDeleteGalleryImage } from "@/lib/supabase-hooks";
 import { BulkActionBar } from "@/components/admin/BulkActionBar";
+import { ImageUploadField } from "@/components/admin/ImageUploadField";
 
 const CATEGORIES = ["General", "Food & Drinks", "Ambience", "Outdoor Seating", "Night Vibes", "Events", "Bar Area"];
 
@@ -134,10 +135,7 @@ export default function AdminGallery() {
         <DialogContent className="bg-card border-border text-foreground max-w-lg">
           <DialogHeader><DialogTitle>Add Gallery Image</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
-            <div>
-              <Label className="text-foreground">Image URL *</Label>
-              <Input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} className="bg-input border-border text-foreground mt-1" placeholder="https://..." />
-            </div>
+            <ImageUploadField value={imageUrl} onChange={setImageUrl} folder="gallery" label="Image *" />
             <div>
               <Label className="text-foreground">Category</Label>
               <Select value={category} onValueChange={setCategory}>
@@ -151,7 +149,6 @@ export default function AdminGallery() {
               <Label className="text-foreground">Alt Text</Label>
               <Input value={altText} onChange={(e) => setAltText(e.target.value)} className="bg-input border-border text-foreground mt-1" placeholder="Describe the image..." />
             </div>
-            {imageUrl && <img src={imageUrl} alt="preview" className="w-full h-40 object-cover rounded-lg" onError={(e) => (e.currentTarget.style.display = "none")} />}
           </div>
           <DialogFooter>
             <Button variant="outline" className="border-border text-foreground hover:bg-accent" onClick={() => setUploadDialog(false)}>Cancel</Button>

@@ -131,3 +131,20 @@
 - [ ] Write payment integration tests
 - [ ] Save checkpoint
 
+
+
+## Notification Center (Phase 4.7 — Done)
+- [x] Bell dropdown in AdminLayout aggregating unread messages + pending reservations + pending orders
+- [x] Realtime refresh via Supabase Postgres Changes channel
+- [x] Per-item deep links to the relevant admin page
+
+
+## Order State Machine (Phase 6.4 — Done, pending DB apply)
+- [x] sql/0006_order_state_machine.sql — BEFORE UPDATE trigger enforcing
+      status + payment_status transition graphs and blocking
+      `completed` while `unpaid`
+- [ ] User: apply sql/0006_order_state_machine.sql in Supabase
+
+## Image Lazy Loading (Phase 8.1 — pass 1)
+- [x] Audited all <img> on public pages — all gallery/menu/event/home images
+      now use loading="lazy"; OrderPage cart thumbnails fixed

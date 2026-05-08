@@ -9,6 +9,7 @@
 // IMPORTANT: deploy with verify_jwt = false (set in supabase/config.toml).
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { logger, withTimedLog } from "../_shared/logger.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -24,7 +25,7 @@ const ackResponse = () =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
-Deno.serve(async (req) => {
+Deno.serve((req) => withTimedLog("mpesa-callback", async () => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -110,4 +111,4 @@ Deno.serve(async (req) => {
     console.error("mpesa-callback error", e);
     return ackResponse(); // Always ACK
   }
-});
+}, { request_id: req.headers.get("x-request-id") ?? undefined }));

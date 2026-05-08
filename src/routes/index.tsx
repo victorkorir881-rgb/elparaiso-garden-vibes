@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import HomePage from "@/pages/public/HomePage";
+import { OG_IMAGES } from "@/lib/og-images";
+import { siteUrl } from "@/lib/site-url";
 
 const restaurantJsonLd = {
   "@context": "https://schema.org",
@@ -27,7 +29,10 @@ export const Route = createFileRoute("/")({
       { name: "description", content: "Authentic Kenyan grills, full bar, music & nightlife in Kisii. Open 24/7. Reservations, delivery & drive-through available." },
       { property: "og:title", content: "Elparaiso Garden Kisii" },
       { property: "og:description", content: "Restaurant, bar, music & nightlife in Kisii. Open 24/7." },
+      { property: "og:image", content: OG_IMAGES.home },
+      { name: "twitter:image", content: OG_IMAGES.home },
     ],
+    links: [{ rel: "canonical", href: siteUrl("/") }],
     scripts: [
       {
         type: "application/ld+json",

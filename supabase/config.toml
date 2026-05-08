@@ -9,3 +9,16 @@ verify_jwt = false
 # Initiate is called from the browser without a logged-in user.
 [functions.mpesa-initiate]
 verify_jwt = false
+
+# send-email is called from public forms (reservation, contact, order) by
+# anonymous browser visitors. The function itself locks recipients to the
+# email recorded in the matching DB row, so the public surface is safe.
+[functions.send-email]
+verify_jwt = false
+
+# send-sms is called from public forms (reservation, order) by anonymous
+# browser visitors. The function locks the recipient phone to the value on
+# the matching DB row and uses a 5-minute idempotency window, so the public
+# surface is safe.
+[functions.send-sms]
+verify_jwt = false

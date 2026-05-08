@@ -1,4 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
+import { enforceRateLimit } from "@/lib/rate-limit";
+import { fireTransactionalEmail } from "@/lib/email";
+import { fireTransactionalSms } from "@/lib/sms";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -271,6 +274,13 @@ export function useCreateReview() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: { author_name: string; rating: number; comment?: string; source?: string; is_featured?: boolean; is_approved?: boolean }) => {
+      // Phase 5.5 — 2 reviews per name per day (public submissions).
+      await enforceRateLimit({
+        action: "review_create",
+        identifier: input.author_name,
+        max: 2,
+        windowSeconds: 86400,
+      });
       const { error } = await supabase.from("reviews").insert(input);
       if (error) throw error;
     },
@@ -319,8 +329,20 @@ export function useCreateReservation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: { name: string; phone: string; email?: string; date?: string; time?: string; party_size?: number; notes?: string; source?: string }) => {
+      // Phase 5.5 — 5 reservation attempts per phone/email per hour.
+      await enforceRateLimit({
+        action: "reservation_create",
+        identifier: input.phone || input.email,
+        max: 5,
+        windowSeconds: 3600,
+      });
       const { data, error } = await supabase.from("reservation_leads").insert(input).select().single();
       if (error) throw error;
+      // Phase 6.1 — fire confirmation email (no-op if customer didn't give email)
+      if (data?.id) {
+        fireTransactionalEmail({ template: "reservation_confirmation", recordId: data.id });
+        fireTransactionalSms({ template: "reservation_confirmation", recordId: data.id });
+      }
       return data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["reservations"] }),
@@ -366,8 +388,17 @@ export function useContactMessages(opts?: { isRead?: boolean }) {
 export function useSubmitContact() {
   return useMutation({
     mutationFn: async (input: { name: string; phone: string; email?: string; inquiry_type?: string; message: string }) => {
-      const { error } = await supabase.from("contact_messages").insert(input);
+      // Phase 5.5 — 3 contact submissions per email/phone per 10 minutes.
+      await enforceRateLimit({
+        action: "contact_submit",
+        identifier: input.email || input.phone,
+        max: 3,
+        windowSeconds: 600,
+      });
+      const { data, error } = await supabase.from("contact_messages").insert(input).select().single();
       if (error) throw error;
+      // Phase 6.1 — ack email (no-op if customer didn't give email)
+      if (data?.id) fireTransactionalEmail({ template: "contact_ack", recordId: data.id });
     },
   });
 }
@@ -491,6 +522,11 @@ export function useCreateOrder() {
     }) => {
       const { data, error } = await supabase.from("orders").insert(input).select().single();
       if (error) throw error;
+      // Phase 6.1 — order confirmation email
+      if (data?.id) {
+        fireTransactionalEmail({ template: "order_confirmation", recordId: data.id });
+        fireTransactionalSms({ template: "order_confirmation", recordId: data.id });
+      }
       return data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["orders"] }),
@@ -503,6 +539,11 @@ export function useUpdateOrder() {
     mutationFn: async ({ id, ...data }: { id: string; status?: string; payment_status?: string; estimated_time?: number; admin_notes?: string }) => {
       const { error } = await supabase.from("orders").update(data).eq("id", id);
       if (error) throw error;
+      // Phase 6.1 — notify customer when admin moves the order to a meaningful status
+      if (data.status && ["confirmed", "preparing", "ready", "completed", "cancelled"].includes(data.status)) {
+        fireTransactionalEmail({ template: "order_status_update", recordId: id, status: data.status });
+        fireTransactionalSms({ template: "order_status_update", recordId: id, status: data.status });
+      }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["orders"] }),
   });

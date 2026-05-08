@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, useCallback, useMemo, t
 import { type User, type Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { siteUrl } from "@/lib/site-url";
+import { setSentryUser } from "@/lib/sentry";
 
 export { supabase };
 
@@ -72,13 +73,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadUser = useCallback(async (session: Session | null) => {
     if (!session?.user) {
+      setSentryUser(null);
       setState({ user: null, session: null, loading: false, isAuthenticated: false });
       return;
     }
     try {
       const adminUser = await buildAdminUser(session.user);
+      setSentryUser({ id: adminUser.id, email: adminUser.email });
       setState({ user: adminUser, session, loading: false, isAuthenticated: true });
     } catch {
+      setSentryUser(null);
       setState({ user: null, session: null, loading: false, isAuthenticated: false });
     }
   }, []);

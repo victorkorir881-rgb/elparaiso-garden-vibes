@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "@tanstack/react-router";
-import { Menu, X, Phone, MapPin, ChevronUp } from "lucide-react";
+import { Menu, X, Phone, MapPin, ChevronUp, User as UserIcon, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useSettings } from "@/lib/supabase-hooks";
+import { useAuth } from "@/lib/auth";
 
 const navLinks = [
   { to: "/", label: "Home" },
@@ -21,6 +22,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { data: settings } = useSettings();
+  const auth = useAuth();
 
   useEffect(() => {
     const handleScroll = () => { setScrolled(window.scrollY > 20); setShowScrollTop(window.scrollY > 400); };
@@ -51,6 +53,11 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
             </nav>
             <div className="hidden md:flex items-center gap-3 flex-shrink-0">
               <a href={`tel:${phone}`} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary transition-colors"><Phone className="w-4 h-4" /><span>{phone}</span></a>
+              {auth.isAuthenticated ? (
+                <Link to="/account"><Button size="sm" variant="outline" className="rounded-full"><UserIcon className="w-4 h-4 mr-1.5" />{auth.user?.name?.split(" ")[0] || "Account"}</Button></Link>
+              ) : (
+                <Link to="/login" search={{ redirect: undefined } as any}><Button size="sm" variant="outline" className="rounded-full"><LogIn className="w-4 h-4 mr-1.5" />Sign in</Button></Link>
+              )}
               <Link to="/reservations"><Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90">Reserve a Table</Button></Link>
             </div>
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>

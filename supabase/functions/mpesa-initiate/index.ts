@@ -80,10 +80,13 @@ Deno.serve((req) => withTimedLog("mpesa-initiate", async () => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
   try {
-    const { orderId, phone, amount } = await req.json();
+    const { orderId, reservationId, phone, amount } = await req.json();
 
-    if (!orderId || typeof orderId !== "string") {
-      return json({ error: "orderId is required" }, 400);
+    // Exactly one of orderId or reservationId must be provided.
+    const hasOrder = typeof orderId === "string" && orderId.length > 0;
+    const hasReservation = typeof reservationId === "string" && reservationId.length > 0;
+    if (hasOrder === hasReservation) {
+      return json({ error: "Provide exactly one of orderId or reservationId" }, 400);
     }
     const normPhone = normalizePhone(String(phone ?? ""));
     if (!normPhone) {
@@ -112,18 +115,47 @@ Deno.serve((req) => withTimedLog("mpesa-initiate", async () => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Verify order exists and amount matches what the server stored
-    const { data: order, error: orderErr } = await supabase
-      .from("orders")
-      .select("id, total_amount, payment_status, order_number")
-      .eq("id", orderId)
-      .single();
-    if (orderErr || !order) return json({ error: "Order not found" }, 404);
-    if (order.payment_status === "paid") {
-      return json({ error: "Order already paid" }, 400);
-    }
-    if (Math.round(Number(order.total_amount)) !== amt) {
-      return json({ error: "Amount mismatch" }, 400);
+    // Resolve target (order or reservation) and verify amount + status
+    let accountReference: string;
+    let transactionDesc: string;
+    let paymentInsert: Record<string, unknown>;
+
+    if (hasOrder) {
+      const { data: order, error: orderErr } = await supabase
+        .from("orders")
+        .select("id, total_amount, payment_status, order_number")
+        .eq("id", orderId)
+        .single();
+      if (orderErr || !order) return json({ error: "Order not found" }, 404);
+      if (order.payment_status === "paid") {
+        return json({ error: "Order already paid" }, 400);
+      }
+      if (Math.round(Number(order.total_amount)) !== amt) {
+        return json({ error: "Amount mismatch" }, 400);
+      }
+      accountReference = order.order_number ?? order.id.slice(0, 12);
+      transactionDesc = `Order ${order.order_number ?? ""}`.slice(0, 13);
+      paymentInsert = { order_id: order.id };
+    } else {
+      const { data: res, error: resErr } = await supabase
+        .from("reservation_leads")
+        .select("id, name, deposit_amount, deposit_status")
+        .eq("id", reservationId)
+        .single();
+      if (resErr || !res) return json({ error: "Reservation not found" }, 404);
+      if (res.deposit_status === "paid") {
+        return json({ error: "Deposit already paid" }, 400);
+      }
+      const expected = Number(res.deposit_amount ?? 0);
+      if (!Number.isFinite(expected) || expected <= 0) {
+        return json({ error: "No deposit configured for this reservation" }, 400);
+      }
+      if (Math.round(expected) !== amt) {
+        return json({ error: "Amount mismatch" }, 400);
+      }
+      accountReference = `RSV-${res.id.slice(0, 8)}`;
+      transactionDesc = `Deposit`;
+      paymentInsert = { reservation_id: res.id };
     }
 
     // Get OAuth token
@@ -146,8 +178,8 @@ Deno.serve((req) => withTimedLog("mpesa-initiate", async () => {
       PartyB: Number(shortcode),
       PhoneNumber: Number(normPhone),
       CallBackURL: callbackUrl,
-      AccountReference: order.order_number ?? order.id.slice(0, 12),
-      TransactionDesc: `Order ${order.order_number ?? ""}`.slice(0, 13),
+      AccountReference: accountReference,
+      TransactionDesc: transactionDesc,
     };
 
     const stkRes = await fetch(`${base}/mpesa/stkpush/v1/processrequest`, {
@@ -163,7 +195,7 @@ Deno.serve((req) => withTimedLog("mpesa-initiate", async () => {
     if (!stkRes.ok || stkData.ResponseCode !== "0") {
       // Persist the failed attempt for debugging
       await supabase.from("payments").insert({
-        order_id: orderId,
+        ...paymentInsert,
         provider: "mpesa",
         amount: amt,
         phone: normPhone,
@@ -187,7 +219,7 @@ Deno.serve((req) => withTimedLog("mpesa-initiate", async () => {
     const { data: payment, error: payErr } = await supabase
       .from("payments")
       .insert({
-        order_id: orderId,
+        ...paymentInsert,
         provider: "mpesa",
         amount: amt,
         phone: normPhone,

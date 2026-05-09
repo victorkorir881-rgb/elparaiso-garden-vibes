@@ -61,7 +61,7 @@ Deno.serve((req) => withTimedLog("mpesa-callback", async () => {
 
     const { data: payment } = await supabase
       .from("payments")
-      .select("id, order_id, status")
+      .select("id, order_id, reservation_id, status")
       .eq("checkout_request_id", checkoutRequestId)
       .single();
 
@@ -97,46 +97,65 @@ Deno.serve((req) => withTimedLog("mpesa-callback", async () => {
       .eq("id", payment.id);
 
     if (newStatus === "success") {
-      // Only fire receipt notifications if the order isn't already marked paid
-      // (defensive: avoids double-sends if Daraja replays the callback).
-      const { data: orderRow } = await supabase
-        .from("orders")
-        .select("payment_status")
-        .eq("id", payment.order_id)
-        .single();
+      if (payment.order_id) {
+        // ── ORDER PAYMENT ─────────────────────────────────────────────────
+        const { data: orderRow } = await supabase
+          .from("orders")
+          .select("payment_status")
+          .eq("id", payment.order_id)
+          .single();
 
-      const wasUnpaid = orderRow?.payment_status !== "paid";
+        const wasUnpaid = orderRow?.payment_status !== "paid";
 
-      await supabase
-        .from("orders")
-        .update({
-          payment_status: "paid",
-          payment_method: "mpesa",
-        })
-        .eq("id", payment.order_id);
+        await supabase
+          .from("orders")
+          .update({
+            payment_status: "paid",
+            payment_method: "mpesa",
+          })
+          .eq("id", payment.order_id);
 
-      if (wasUnpaid) {
-        // Fire-and-forget receipt notifications. The send-email and send-sms
-        // functions have their own 5-minute idempotency window, so retries
-        // by Daraja still won't double-send.
-        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-        const invoke = (fn: string) =>
-          fetch(`${supabaseUrl}/functions/v1/${fn}`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${serviceKey}`,
-              "apikey": serviceKey,
-            },
-            body: JSON.stringify({
-              template: "order_payment_receipt",
-              recordId: payment.order_id,
-            }),
-          }).catch((e) => console.warn(`mpesa-callback: ${fn} invoke failed`, e));
-        // Don't await — fire-and-forget so we ACK Daraja quickly.
-        void invoke("send-email");
-        void invoke("send-sms");
+        if (wasUnpaid) {
+          // Fire-and-forget receipt notifications. The send-email and send-sms
+          // functions have their own 5-minute idempotency window, so retries
+          // by Daraja still won't double-send.
+          const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+          const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+          const invoke = (fn: string) =>
+            fetch(`${supabaseUrl}/functions/v1/${fn}`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${serviceKey}`,
+                "apikey": serviceKey,
+              },
+              body: JSON.stringify({
+                template: "order_payment_receipt",
+                recordId: payment.order_id,
+              }),
+            }).catch((e) => console.warn(`mpesa-callback: ${fn} invoke failed`, e));
+          void invoke("send-email");
+          void invoke("send-sms");
+          void invoke("send-whatsapp");
+        }
+      } else if (payment.reservation_id) {
+        // ── RESERVATION DEPOSIT ───────────────────────────────────────────
+        // Mark the reservation deposit as paid + auto-confirm if still pending.
+        const { data: resRow } = await supabase
+          .from("reservation_leads")
+          .select("deposit_status, status")
+          .eq("id", payment.reservation_id)
+          .single();
+
+        if (resRow?.deposit_status !== "paid") {
+          await supabase
+            .from("reservation_leads")
+            .update({
+              deposit_status: "paid",
+              status: resRow?.status === "pending" ? "confirmed" : resRow?.status,
+            })
+            .eq("id", payment.reservation_id);
+        }
       }
     }
 

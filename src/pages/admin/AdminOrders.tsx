@@ -1,13 +1,20 @@
 import { useState, useMemo } from "react";
-import { useOrders, useOrderStats, useUpdateOrder, useDeleteOrder } from "@/lib/supabase-hooks";
+import {
+  useOrders,
+  useOrderStats,
+  useUpdateOrder,
+  useDeleteOrder,
+  useOrderPayments,
+  useRefundPayment,
+} from "@/lib/supabase-hooks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Trash2, Edit2, Eye, Download } from "lucide-react";
+import { Loader2, Trash2, Edit2, Eye, Download, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { downloadCsv } from "@/lib/csv-export";
 
@@ -32,6 +39,8 @@ export default function AdminOrders() {
   const [editingStatus, setEditingStatus] = useState("");
   const [editingNotes, setEditingNotes] = useState("");
   const [editingTime, setEditingTime] = useState("");
+  const [refundTarget, setRefundTarget] = useState<{ id: string; amount: number; receipt: string | null } | null>(null);
+  const [refundReason, setRefundReason] = useState("");
 
   const { data: orders = [], isLoading } = useOrders({
     status: filterStatus && filterStatus !== "all" ? filterStatus : undefined,
@@ -41,6 +50,23 @@ export default function AdminOrders() {
   const { data: stats } = useOrderStats();
   const updateOrder = useUpdateOrder();
   const deleteOrder = useDeleteOrder();
+  const { data: orderPayments = [] } = useOrderPayments(selectedOrder?.id);
+  const refundPayment = useRefundPayment();
+
+  const handleRefund = () => {
+    if (!refundTarget) return;
+    refundPayment.mutate(
+      { paymentId: refundTarget.id, amount: refundTarget.amount, reason: refundReason || undefined },
+      {
+        onSuccess: () => {
+          toast.success("Refund initiated. Awaiting M-Pesa confirmation.");
+          setRefundTarget(null);
+          setRefundReason("");
+        },
+        onError: (e: any) => toast.error(e?.message ?? "Refund failed"),
+      },
+    );
+  };
 
   const handleUpdateOrder = async () => {
     if (!selectedOrder) return;
@@ -251,6 +277,55 @@ export default function AdminOrders() {
                             <Textarea value={editingNotes} onChange={(e) => setEditingNotes(e.target.value)} placeholder="Add internal notes..." rows={3} />
                           </div>
 
+                          <div>
+                            <label className="text-sm font-medium mb-2 block">Payments</label>
+                            {orderPayments.length === 0 ? (
+                              <p className="text-sm text-foreground/60">No M-Pesa payment attempts recorded.</p>
+                            ) : (
+                              <div className="space-y-2">
+                                {orderPayments.map((p) => (
+                                  <div key={p.id} className="flex items-center justify-between gap-3 bg-muted p-3 rounded-lg text-sm">
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="font-mono text-xs">{p.mpesa_receipt_number ?? "—"}</span>
+                                        <Badge variant="outline" className="capitalize">{p.status}</Badge>
+                                        {p.refund_status !== "none" && (
+                                          <Badge
+                                            className={
+                                              p.refund_status === "refunded"
+                                                ? "bg-emerald-100 text-emerald-800"
+                                                : p.refund_status === "pending"
+                                                ? "bg-yellow-100 text-yellow-800"
+                                                : "bg-red-100 text-red-800"
+                                            }
+                                          >
+                                            Refund: {p.refund_status}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      <p className="text-xs text-foreground/60 mt-1">
+                                        KES {p.amount.toLocaleString()} · {new Date(p.created_at).toLocaleString()}
+                                        {p.refund_result_desc ? ` · ${p.refund_result_desc}` : ""}
+                                      </p>
+                                    </div>
+                                    {p.status === "success" && (p.refund_status === "none" || p.refund_status === "failed") && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => {
+                                          setRefundTarget({ id: p.id, amount: p.amount, receipt: p.mpesa_receipt_number });
+                                          setRefundReason("");
+                                        }}
+                                      >
+                                        <Undo2 className="w-4 h-4 mr-1" /> Refund
+                                      </Button>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
                           <div className="flex gap-2 justify-end pt-4 border-t">
                             <Button variant="outline" onClick={() => handleDeleteOrder(selectedOrder.id)} disabled={deleteOrder.isPending}>
                               <Trash2 className="w-4 h-4 mr-2" /> Delete
@@ -270,6 +345,43 @@ export default function AdminOrders() {
           ))}
         </div>
       )}
+
+      <Dialog open={!!refundTarget} onOpenChange={(o) => { if (!o) setRefundTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Refund payment</DialogTitle>
+          </DialogHeader>
+          {refundTarget && (
+            <div className="space-y-4">
+              <p className="text-sm text-foreground/70">
+                This will send a Daraja Reversal request for receipt{" "}
+                <span className="font-mono">{refundTarget.receipt ?? "—"}</span>{" "}
+                of <strong>KES {refundTarget.amount.toLocaleString()}</strong>.
+                The result is asynchronous — refund status updates when M-Pesa
+                confirms.
+              </p>
+              <div>
+                <label className="text-sm font-medium mb-2 block">Reason (optional, ≤100 chars)</label>
+                <Input
+                  value={refundReason}
+                  maxLength={100}
+                  onChange={(e) => setRefundReason(e.target.value)}
+                  placeholder="e.g. Customer cancelled order"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRefundTarget(null)} disabled={refundPayment.isPending}>
+              Cancel
+            </Button>
+            <Button onClick={handleRefund} disabled={refundPayment.isPending}>
+              {refundPayment.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Undo2 className="w-4 h-4 mr-2" />}
+              Initiate refund
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

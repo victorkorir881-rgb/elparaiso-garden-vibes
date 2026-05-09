@@ -93,10 +93,18 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  description,
   onEscapeKeyDown,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean;
+  /**
+   * Optional accessible description. When provided as a string it is rendered
+   * inside a visually-hidden DialogDescription, satisfying Radix's
+   * "DialogContent requires a DialogDescription" a11y warning without
+   * forcing every caller to add visible copy. Pass `false` to opt out.
+   */
+  description?: React.ReactNode | false;
 }) {
   const { isComposing } = useDialogComposition();
 
@@ -130,6 +138,11 @@ function DialogContent({
         onEscapeKeyDown={handleEscapeKeyDown}
         {...props}
       >
+        {description !== false && typeof description !== "undefined" && (
+          <DialogPrimitive.Description className="sr-only">
+            {description}
+          </DialogPrimitive.Description>
+        )}
         {children}
         {showCloseButton && (
           <DialogPrimitive.Close

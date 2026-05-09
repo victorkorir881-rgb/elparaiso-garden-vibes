@@ -22,3 +22,23 @@ verify_jwt = false
 # surface is safe.
 [functions.send-sms]
 verify_jwt = false
+
+# Daraja Reversal result callback. Public webhook, correlated by ConversationID
+# stored on payments.refund_request_id; optional ?token=… shared secret via
+# MPESA_REVERSAL_TOKEN.
+[functions.mpesa-reversal-result]
+verify_jwt = false
+
+# Public WhatsApp sender (Phase 6.3) called from public reservation/order
+# forms; recipient is locked to the DB record by the function.
+[functions.send-whatsapp]
+verify_jwt = false
+
+# Public liveness probe for UptimeRobot/Pingdom — no JWT required.
+[functions.health]
+verify_jwt = false
+
+# Public invitation acceptance endpoint. Caller has no session yet — the
+# function validates a one-time token (hashed) tied to the invited email.
+[functions.admin-accept-invite]
+verify_jwt = false

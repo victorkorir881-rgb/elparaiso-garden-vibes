@@ -188,14 +188,21 @@ export default function OrderPage() {
   if (orderPlaced) {
     return (
       <PublicLayout>
-        <div className="bg-background py-8 sm:py-12 px-3 sm:px-4">
+        <div className="relative bg-background py-12 sm:py-20 px-3 sm:px-4 overflow-hidden">
+          <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 opacity-60"
+            style={{ background: "radial-gradient(60% 50% at 50% 0%, oklch(74% 0.11 75 / 0.18), transparent 70%)" }} />
           <div className="max-w-2xl mx-auto text-center">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Check className="w-8 h-8 text-green-600" />
+            <div className="relative w-20 h-20 mx-auto mb-6">
+              <div className="absolute inset-0 rounded-full blur-xl" style={{ background: "var(--gradient-gold)", opacity: 0.45 }} />
+              <div className="relative w-20 h-20 rounded-full flex items-center justify-center"
+                style={{ background: "var(--gradient-gold)", boxShadow: "var(--shadow-gold)" }}>
+                <Check className="w-9 h-9 text-primary-foreground" strokeWidth={3} />
+              </div>
             </div>
-            <h1 className="text-3xl sm:text-4xl font-bold font-display mb-4">Order Placed Successfully!</h1>
-            <p className="text-foreground/60 mb-8">Your order has been received and is being prepared.</p>
-            <Card className="p-6 sm:p-8 mb-8 bg-muted">
+            <Badge variant="outline" className="mb-3 border-primary/40 text-primary">Confirmed</Badge>
+            <h1 className="text-3xl sm:text-5xl font-bold font-display mb-3 tracking-tight">Order Placed Successfully</h1>
+            <p className="text-foreground/60 mb-8 text-base sm:text-lg">Your order has been received and is being prepared with care.</p>
+            <Card className="p-6 sm:p-8 mb-8 border-primary/20" style={{ background: "var(--gradient-surface)", boxShadow: "var(--shadow-elegant)" }}>
               <div className="space-y-4">
                 <div>
                   <p className="text-sm text-foreground/60 mb-1">Order Number</p>
@@ -236,56 +243,106 @@ export default function OrderPage() {
 
   return (
     <PublicLayout>
-      <div className="bg-background py-6 sm:py-12 px-3 sm:px-4">
+      <div className="relative bg-background py-6 sm:py-12 px-3 sm:px-4 overflow-hidden">
+        {/* Ambient gold glow */}
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 -top-32 h-[420px] -z-10 opacity-70"
+          style={{ background: "radial-gradient(50% 60% at 50% 0%, oklch(74% 0.11 75 / 0.18), transparent 70%)" }} />
         <div className="max-w-7xl mx-auto">
           {/* Page navigation */}
           <nav aria-label="Order page navigation" className="mb-6 flex flex-wrap gap-2">
-            <Link to="/"><Button variant="outline" size="sm"><Home className="w-4 h-4 mr-1.5" />Home</Button></Link>
-            <Link to="/menu"><Button variant="outline" size="sm"><UtensilsCrossed className="w-4 h-4 mr-1.5" />Menu</Button></Link>
-            <Link to="/track"><Button variant="outline" size="sm"><MapPin className="w-4 h-4 mr-1.5" />Track Order</Button></Link>
-            <Link to="/reservations"><Button variant="outline" size="sm"><CalendarDays className="w-4 h-4 mr-1.5" />Reserve a Table</Button></Link>
-            <a href="tel:0791224513"><Button variant="outline" size="sm"><Phone className="w-4 h-4 mr-1.5" />Call</Button></a>
+            <Link to="/"><Button variant="outline" size="sm" className="rounded-full"><Home className="w-4 h-4 mr-1.5" />Home</Button></Link>
+            <Link to="/menu"><Button variant="outline" size="sm" className="rounded-full"><UtensilsCrossed className="w-4 h-4 mr-1.5" />Menu</Button></Link>
+            <Link to="/track"><Button variant="outline" size="sm" className="rounded-full"><MapPin className="w-4 h-4 mr-1.5" />Track Order</Button></Link>
+            <Link to="/reservations"><Button variant="outline" size="sm" className="rounded-full"><CalendarDays className="w-4 h-4 mr-1.5" />Reserve a Table</Button></Link>
+            <a href="tel:0791224513"><Button variant="outline" size="sm" className="rounded-full"><Phone className="w-4 h-4 mr-1.5" />Call</Button></a>
           </nav>
 
-          <div className="mb-6 sm:mb-8">
-            <h1 className="text-3xl sm:text-4xl font-bold font-display mb-2">Place Your Order</h1>
-            <p className="text-foreground/60 text-sm sm:text-base">Browse our menu and check out in three quick steps.</p>
-          </div>
+          <header className="mb-8 sm:mb-12 max-w-3xl">
+            <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full border border-primary/30 bg-primary/5 text-xs font-medium uppercase tracking-[0.18em] text-primary">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              Order online · M-Pesa
+            </div>
+            <h1 className="text-4xl sm:text-6xl font-display font-semibold mb-4 tracking-tight leading-[1.05]">
+              Place your{" "}
+              <span className="italic" style={{ background: "var(--gradient-gold)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", backgroundClip: "text" }}>
+                order
+              </span>
+            </h1>
+            <p className="text-foreground/65 text-base sm:text-lg leading-relaxed">
+              Hand-picked dishes from our kitchen, delivered to your door or ready when you arrive — checkout in three quick steps.
+            </p>
+          </header>
 
           <div className="grid lg:grid-cols-3 gap-6 lg:gap-8">
             {/* LEFT — menu */}
             <div className="lg:col-span-2 space-y-6">
-              <Card className="p-3 sm:p-4">
+              <Card className="p-3 sm:p-4 border-border/60" style={{ background: "var(--gradient-surface)" }}>
                 <div className="flex gap-2 flex-wrap">
-                  <Button variant={selectedCategory === null ? "default" : "outline"} onClick={() => setSelectedCategory(null)} size="sm">All Items</Button>
+                  <Button variant={selectedCategory === null ? "default" : "outline"} onClick={() => setSelectedCategory(null)} size="sm" className="rounded-full">All Items</Button>
                   {categories.map((cat: any) => (
                     <Button key={cat.id} variant={selectedCategory === cat.id ? "default" : "outline"} onClick={() => setSelectedCategory(cat.id)} size="sm">{cat.name}</Button>
                   ))}
                 </div>
               </Card>
 
-              <div className="grid sm:grid-cols-2 gap-4 stagger">
-                {filteredItems.map((item: any) => (
-                  <Card key={item.id} className="overflow-hidden hover:border-primary/50 transition-colors">
-                    {item.image_url && (
-                      <div className="w-full h-40 bg-muted overflow-hidden">
-                        <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" loading="lazy" decoding="async" />
+              {filteredItems.length === 0 ? (
+                <Card className="p-10 text-center border-dashed">
+                  <UtensilsCrossed className="w-10 h-10 mx-auto mb-3 text-foreground/30" />
+                  <p className="text-foreground/60">No dishes in this category yet. Check back soon.</p>
+                </Card>
+              ) : (
+                <div className="grid sm:grid-cols-2 gap-4 sm:gap-5 stagger">
+                  {filteredItems.map((item: any) => (
+                    <Card
+                      key={item.id}
+                      className="group relative overflow-hidden border-border/60 hover:border-primary/50 transition-all duration-300 hover:-translate-y-1"
+                      style={{ background: "var(--gradient-surface)", boxShadow: "var(--shadow-soft)" }}
+                    >
+                      {item.image_url ? (
+                        <div className="relative w-full h-44 sm:h-48 bg-muted overflow-hidden">
+                          <img
+                            src={item.image_url}
+                            alt={item.name}
+                            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                            loading="lazy"
+                            decoding="async"
+                          />
+                          <div aria-hidden className="absolute inset-0 bg-gradient-to-t from-card via-card/30 to-transparent" />
+                          <div className="absolute top-3 right-3 px-2.5 py-1 rounded-full text-xs font-semibold backdrop-blur-md bg-background/70 border border-primary/30 text-primary shadow-sm">
+                            KES {parseFloat(item.price).toLocaleString()}
+                          </div>
+                          {!item.is_available && (
+                            <div className="absolute top-3 left-3 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-destructive/90 text-destructive-foreground">
+                              Out of stock
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="px-4 pt-4 flex justify-end">
+                          <span className="text-lg font-bold text-primary">KES {parseFloat(item.price).toLocaleString()}</span>
+                        </div>
+                      )}
+                      <div className="p-4 sm:p-5">
+                        <h3 className="font-display text-xl font-semibold tracking-tight mb-1 group-hover:text-primary transition-colors">
+                          {item.name}
+                        </h3>
+                        {item.description && (
+                          <p className="text-sm text-foreground/60 mb-4 line-clamp-2 leading-relaxed">{item.description}</p>
+                        )}
+                        <Button
+                          onClick={() => handleAddToCart(item)}
+                          className="w-full rounded-full font-medium"
+                          disabled={!item.is_available}
+                          style={item.is_available ? { background: "var(--gradient-gold)", color: "var(--primary-foreground)", boxShadow: "var(--shadow-gold)" } : undefined}
+                        >
+                          <Plus className="w-4 h-4 mr-1.5" />
+                          {item.is_available ? "Add to Cart" : "Unavailable"}
+                        </Button>
                       </div>
-                    )}
-                    <div className="p-4">
-                      <div className="flex items-start justify-between mb-2">
-                        <h3 className="font-semibold">{item.name}</h3>
-                        <p className="text-lg font-bold text-primary">KES {parseFloat(item.price).toLocaleString()}</p>
-                      </div>
-                      {item.description && <p className="text-sm text-foreground/60 mb-3">{item.description}</p>}
-                      <Button onClick={() => handleAddToCart(item)} className="w-full" disabled={!item.is_available}>
-                        <ShoppingCart className="w-4 h-4 mr-2" />
-                        {item.is_available ? "Add to Cart" : "Out of Stock"}
-                      </Button>
-                    </div>
-                  </Card>
-                ))}
-              </div>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* RIGHT — checkout column */}
@@ -331,14 +388,21 @@ export default function OrderPage() {
                 )}
 
                 {/* Cart card — visible on every step as summary */}
-                <Card className="p-4 border-2 border-primary/20">
-                  <div className="flex items-center gap-2 mb-4">
-                    <ShoppingCart className="w-5 h-5" />
-                    <h2 className="text-lg font-semibold">Your Cart</h2>
-                    {itemCount > 0 && <Badge className="ml-auto">{itemCount}</Badge>}
+                <Card className="p-5 border-primary/25 relative overflow-hidden" style={{ background: "var(--gradient-surface)", boxShadow: "var(--shadow-elegant)" }}>
+                  <div aria-hidden className="absolute -top-12 -right-12 w-32 h-32 rounded-full opacity-20 blur-2xl" style={{ background: "var(--gradient-gold)" }} />
+                  <div className="relative flex items-center gap-2 mb-4">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: "var(--gradient-gold)" }}>
+                      <ShoppingCart className="w-4 h-4 text-primary-foreground" />
+                    </div>
+                    <h2 className="text-lg font-display font-semibold tracking-tight">Your Cart</h2>
+                    {itemCount > 0 && <Badge className="ml-auto" style={{ background: "var(--gradient-gold)", color: "var(--primary-foreground)" }}>{itemCount}</Badge>}
                   </div>
                   {items.length === 0 ? (
-                    <p className="text-sm text-foreground/60 py-4">Your cart is empty. Add items from the menu to begin.</p>
+                    <div className="text-center py-6">
+                      <ShoppingCart className="w-10 h-10 mx-auto mb-3 text-foreground/20" strokeWidth={1.5} />
+                      <p className="text-sm text-foreground/60">Your cart is empty.</p>
+                      <p className="text-xs text-foreground/40 mt-1">Add dishes from the menu to begin.</p>
+                    </div>
                   ) : (
                     <>
                       <div className="space-y-2 mb-4 max-h-64 overflow-y-auto">

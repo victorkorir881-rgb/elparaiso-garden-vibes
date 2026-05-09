@@ -24,6 +24,22 @@ export default function AdminLogin() {
   const [fullName, setFullName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [installEvt, setInstallEvt] = useState<BIPEvent | null>(null);
+  const [registrationOpen, setRegistrationOpen] = useState<boolean | null>(null);
+
+  // Public registration is only available until the first super_admin exists.
+  // After that, additional admins must be added via invitation.
+  useEffect(() => {
+    let active = true;
+    (supabase.rpc as any)("has_super_admin").then(({ data, error }: { data: unknown; error: unknown }) => {
+      if (!active) return;
+      // Default to closed on error so we never accidentally expose the form.
+      setRegistrationOpen(error ? false : !data);
+    });
+    return () => { active = false; };
+  }, []);
+  useEffect(() => {
+    if (registrationOpen === false && mode === "register") setMode("login");
+  }, [registrationOpen, mode]);
 
   // capture install prompt so we can offer "Download as App"
   useEffect(() => {
@@ -106,7 +122,7 @@ export default function AdminLogin() {
         </div>
 
         <div className="bg-card border border-border rounded-xl p-6">
-          {mode !== "forgot" && (
+          {mode !== "forgot" && registrationOpen && (
             <div className="flex mb-6">
               <button
                 type="button"
@@ -120,7 +136,7 @@ export default function AdminLogin() {
                 onClick={() => setMode("register")}
                 className={`flex-1 py-2 text-sm font-medium border-b-2 transition-colors ${mode === "register" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
               >
-                Register
+                Register (first admin)
               </button>
             </div>
           )}
@@ -204,7 +220,10 @@ export default function AdminLogin() {
         </Button>
 
         <p className="text-xs text-muted-foreground text-center mt-4">
-          First registered user becomes super admin. For security, sign in is required each browser session.
+          {registrationOpen
+            ? "The first registered user becomes super admin. After that, new admins join by invitation only."
+            : "Admin accounts are by invitation only. Ask a super admin to send you an invite."}
+          {" "}For security, sign in is required each browser session.
         </p>
       </div>
     </div>

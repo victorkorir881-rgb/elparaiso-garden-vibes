@@ -179,16 +179,16 @@ export default function OrderTrackingPage() {
         </form>
 
         {isLoading && (
-          <div className="text-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary mb-4" />
+          <div className="text-center py-12" role="status" aria-live="polite" aria-busy="true">
+            <Loader2 aria-hidden="true" className="w-8 h-8 animate-spin mx-auto text-primary mb-4" />
             <p className="text-foreground/60">Searching for your order...</p>
           </div>
         )}
 
         {error && (
-          <Card className="p-6 border-red-200 bg-red-50">
+          <Card className="p-6 border-red-200 bg-red-50" role="alert">
             <div className="flex gap-3">
-              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <AlertCircle aria-hidden="true" className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
               <div>
                 <h3 className="font-semibold text-red-900">Error</h3>
                 <p className="text-red-700 text-sm">Unable to load orders. Please try again.</p>

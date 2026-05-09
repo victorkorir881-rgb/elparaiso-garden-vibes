@@ -25,6 +25,7 @@ type AuthContextType = AuthState & {
   error: string | null;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null }>;
+  signInWithGoogle: (redirectPath?: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -81,6 +82,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const adminUser = await buildAdminUser(session.user);
       setSentryUser({ id: adminUser.id, email: adminUser.email });
       setState({ user: adminUser, session, loading: false, isAuthenticated: true });
+      // Backfill any past guest orders that match this user's verified email.
+      // Safe to call repeatedly — RPC is idempotent and returns 0 when nothing matches.
+      void (supabase.rpc as any)("link_orders_to_current_user").then(() => {}, () => {});
     } catch {
       setSentryUser(null);
       setState({ user: null, session: null, loading: false, isAuthenticated: false });
@@ -120,17 +124,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: null };
   }, []);
 
+  const signInWithGoogle = useCallback(async (redirectPath?: string) => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: siteUrl(redirectPath ?? "/account") },
+    });
+    if (error) return { error: error.message };
+    return { error: null };
+  }, []);
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setState({ user: null, session: null, loading: false, isAuthenticated: false });
   }, []);
 
-  // ── 5-minute idle timeout ───────────────────────────────────────────────
-  // when the user is signed in, watch for activity (mouse, keyboard, touch,
-  // scroll, route changes). after 5 minutes with no activity, sign them out
-  // and let the route guard kick them back to /admin/login.
+  // ── 5-minute idle timeout (admin/staff only) ───────────────────────────
+  // Customers stay signed in indefinitely; only privileged sessions get the
+  // forced logout for security.
+  const isPrivileged = state.user?.role && state.user.role !== "user";
   useEffect(() => {
-    if (!state.isAuthenticated) return;
+    if (!state.isAuthenticated || !isPrivileged) return;
     const IDLE_MS = 5 * 60 * 1000;
     let timer: ReturnType<typeof setTimeout>;
     const reset = () => {
@@ -152,7 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearTimeout(timer);
       events.forEach((e) => window.removeEventListener(e, reset));
     };
-  }, [state.isAuthenticated]);
+  }, [state.isAuthenticated, isPrivileged]);
 
   const refresh = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -164,10 +177,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     error: null as string | null,
     signIn,
     signUp,
+    signInWithGoogle,
     signOut,
     refresh,
     logout: signOut,
-  }), [state, signIn, signUp, signOut, refresh]);
+  }), [state, signIn, signUp, signInWithGoogle, signOut, refresh]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

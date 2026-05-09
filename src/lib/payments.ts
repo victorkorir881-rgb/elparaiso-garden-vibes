@@ -1,8 +1,14 @@
 import { supabase } from "@/integrations/supabase/client";
 import { useMutation, useQuery } from "@tanstack/react-query";
 
+/**
+ * Initiate input — pass exactly one of `orderId` or `reservationId`.
+ *  - `orderId`        → pays a placed food order in full
+ *  - `reservationId`  → pays the deposit configured on a reservation lead
+ */
 export interface InitiatePaymentInput {
-  orderId: string;
+  orderId?: string;
+  reservationId?: string;
   phone: string;
   amount: number;
 }

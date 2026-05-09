@@ -16,10 +16,12 @@ import { Route as ReservationsRouteImport } from './routes/reservations'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as OrderRouteImport } from './routes/order'
 import { Route as MenuRouteImport } from './routes/menu'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as GalleryRouteImport } from './routes/gallery'
 import { Route as EventsRouteImport } from './routes/events'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as AdminRouteImport } from './routes/admin'
+import { Route as AccountRouteImport } from './routes/account'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminIndexRouteImport } from './routes/admin/index'
@@ -37,6 +39,7 @@ import { Route as AdminEventsRouteImport } from './routes/admin/events'
 import { Route as AdminBusinessRulesRouteImport } from './routes/admin/business-rules'
 import { Route as AdminAuditLogRouteImport } from './routes/admin/audit-log'
 import { Route as AdminAnalyticsRouteImport } from './routes/admin/analytics'
+import { Route as AdminAcceptInviteRouteImport } from './routes/admin/accept-invite'
 
 const TrackRoute = TrackRouteImport.update({
   id: '/track',
@@ -73,6 +76,11 @@ const MenuRoute = MenuRouteImport.update({
   path: '/menu',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const GalleryRoute = GalleryRouteImport.update({
   id: '/gallery',
   path: '/gallery',
@@ -91,6 +99,11 @@ const ContactRoute = ContactRouteImport.update({
 const AdminRoute = AdminRouteImport.update({
   id: '/admin',
   path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountRoute = AccountRouteImport.update({
+  id: '/account',
+  path: '/account',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AboutRoute = AboutRouteImport.update({
@@ -178,14 +191,21 @@ const AdminAnalyticsRoute = AdminAnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminAcceptInviteRoute = AdminAcceptInviteRouteImport.update({
+  id: '/accept-invite',
+  path: '/accept-invite',
+  getParentRoute: () => AdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/account': typeof AccountRoute
   '/admin': typeof AdminRouteWithChildren
   '/contact': typeof ContactRoute
   '/events': typeof EventsRoute
   '/gallery': typeof GalleryRoute
+  '/login': typeof LoginRoute
   '/menu': typeof MenuRoute
   '/order': typeof OrderRoute
   '/privacy': typeof PrivacyRoute
@@ -193,6 +213,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/track': typeof TrackRoute
+  '/admin/accept-invite': typeof AdminAcceptInviteRoute
   '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/audit-log': typeof AdminAuditLogRoute
   '/admin/business-rules': typeof AdminBusinessRulesRoute
@@ -212,9 +233,11 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/account': typeof AccountRoute
   '/contact': typeof ContactRoute
   '/events': typeof EventsRoute
   '/gallery': typeof GalleryRoute
+  '/login': typeof LoginRoute
   '/menu': typeof MenuRoute
   '/order': typeof OrderRoute
   '/privacy': typeof PrivacyRoute
@@ -222,6 +245,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/track': typeof TrackRoute
+  '/admin/accept-invite': typeof AdminAcceptInviteRoute
   '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/audit-log': typeof AdminAuditLogRoute
   '/admin/business-rules': typeof AdminBusinessRulesRoute
@@ -242,10 +266,12 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/account': typeof AccountRoute
   '/admin': typeof AdminRouteWithChildren
   '/contact': typeof ContactRoute
   '/events': typeof EventsRoute
   '/gallery': typeof GalleryRoute
+  '/login': typeof LoginRoute
   '/menu': typeof MenuRoute
   '/order': typeof OrderRoute
   '/privacy': typeof PrivacyRoute
@@ -253,6 +279,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/terms': typeof TermsRoute
   '/track': typeof TrackRoute
+  '/admin/accept-invite': typeof AdminAcceptInviteRoute
   '/admin/analytics': typeof AdminAnalyticsRoute
   '/admin/audit-log': typeof AdminAuditLogRoute
   '/admin/business-rules': typeof AdminBusinessRulesRoute
@@ -274,10 +301,12 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/about'
+    | '/account'
     | '/admin'
     | '/contact'
     | '/events'
     | '/gallery'
+    | '/login'
     | '/menu'
     | '/order'
     | '/privacy'
@@ -285,6 +314,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/terms'
     | '/track'
+    | '/admin/accept-invite'
     | '/admin/analytics'
     | '/admin/audit-log'
     | '/admin/business-rules'
@@ -304,9 +334,11 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/about'
+    | '/account'
     | '/contact'
     | '/events'
     | '/gallery'
+    | '/login'
     | '/menu'
     | '/order'
     | '/privacy'
@@ -314,6 +346,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/terms'
     | '/track'
+    | '/admin/accept-invite'
     | '/admin/analytics'
     | '/admin/audit-log'
     | '/admin/business-rules'
@@ -333,10 +366,12 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/about'
+    | '/account'
     | '/admin'
     | '/contact'
     | '/events'
     | '/gallery'
+    | '/login'
     | '/menu'
     | '/order'
     | '/privacy'
@@ -344,6 +379,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/terms'
     | '/track'
+    | '/admin/accept-invite'
     | '/admin/analytics'
     | '/admin/audit-log'
     | '/admin/business-rules'
@@ -364,10 +400,12 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
+  AccountRoute: typeof AccountRoute
   AdminRoute: typeof AdminRouteWithChildren
   ContactRoute: typeof ContactRoute
   EventsRoute: typeof EventsRoute
   GalleryRoute: typeof GalleryRoute
+  LoginRoute: typeof LoginRoute
   MenuRoute: typeof MenuRoute
   OrderRoute: typeof OrderRoute
   PrivacyRoute: typeof PrivacyRoute
@@ -428,6 +466,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MenuRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/gallery': {
       id: '/gallery'
       path: '/gallery'
@@ -454,6 +499,13 @@ declare module '@tanstack/react-router' {
       path: '/admin'
       fullPath: '/admin'
       preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account': {
+      id: '/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AccountRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/about': {
@@ -575,10 +627,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminAnalyticsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/accept-invite': {
+      id: '/admin/accept-invite'
+      path: '/accept-invite'
+      fullPath: '/admin/accept-invite'
+      preLoaderRoute: typeof AdminAcceptInviteRouteImport
+      parentRoute: typeof AdminRoute
+    }
   }
 }
 
 interface AdminRouteChildren {
+  AdminAcceptInviteRoute: typeof AdminAcceptInviteRoute
   AdminAnalyticsRoute: typeof AdminAnalyticsRoute
   AdminAuditLogRoute: typeof AdminAuditLogRoute
   AdminBusinessRulesRoute: typeof AdminBusinessRulesRoute
@@ -597,6 +657,7 @@ interface AdminRouteChildren {
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
+  AdminAcceptInviteRoute: AdminAcceptInviteRoute,
   AdminAnalyticsRoute: AdminAnalyticsRoute,
   AdminAuditLogRoute: AdminAuditLogRoute,
   AdminBusinessRulesRoute: AdminBusinessRulesRoute,
@@ -619,10 +680,12 @@ const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
+  AccountRoute: AccountRoute,
   AdminRoute: AdminRouteWithChildren,
   ContactRoute: ContactRoute,
   EventsRoute: EventsRoute,
   GalleryRoute: GalleryRoute,
+  LoginRoute: LoginRoute,
   MenuRoute: MenuRoute,
   OrderRoute: OrderRoute,
   PrivacyRoute: PrivacyRoute,

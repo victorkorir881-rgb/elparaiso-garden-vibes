@@ -2,6 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { fireTransactionalEmail } from "@/lib/email";
 import { fireTransactionalSms } from "@/lib/sms";
+import { fireTransactionalWhatsapp } from "@/lib/whatsapp";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -342,6 +343,7 @@ export function useCreateReservation() {
       if (data?.id) {
         fireTransactionalEmail({ template: "reservation_confirmation", recordId: data.id });
         fireTransactionalSms({ template: "reservation_confirmation", recordId: data.id });
+        fireTransactionalWhatsapp({ template: "reservation_confirmation", recordId: data.id });
       }
       return data;
     },
@@ -530,6 +532,7 @@ export function useCreateOrder() {
       if (data?.id) {
         fireTransactionalEmail({ template: "order_confirmation", recordId: data.id });
         fireTransactionalSms({ template: "order_confirmation", recordId: data.id });
+        fireTransactionalWhatsapp({ template: "order_confirmation", recordId: data.id });
       }
       return data;
     },
@@ -547,6 +550,7 @@ export function useUpdateOrder() {
       if (data.status && ["confirmed", "preparing", "ready", "completed", "cancelled"].includes(data.status)) {
         fireTransactionalEmail({ template: "order_status_update", recordId: id, status: data.status });
         fireTransactionalSms({ template: "order_status_update", recordId: id, status: data.status });
+        fireTransactionalWhatsapp({ template: "order_status_update", recordId: id, status: data.status });
       }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["orders"] }),
@@ -763,5 +767,107 @@ export function useUpdateUserRole() {
       }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["adminUsers"] }),
+  });
+}
+
+// Phase 5.4 — Admin / self account deletion via the `admin-delete-user`
+// edge function. The function verifies the caller's JWT and enforces:
+//   * self-delete is always allowed for the signed-in user
+//   * deleting someone else requires admin/super_admin role
+//   * cannot delete the last remaining admin
+export function useDeleteAdminUser() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ userId }: { userId: string }) => {
+      const { data, error } = await supabase.functions.invoke<{ ok: true; deletedId: string; self: boolean }>(
+        "admin-delete-user",
+        { body: { userId } },
+      );
+      if (error) throw new Error(error.message ?? "Failed to delete account");
+      if (!data?.ok) throw new Error("Delete returned no confirmation");
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["adminUsers"] }),
+  });
+}
+
+// ─── PAYMENTS PER ORDER + REFUNDS (Phase 7.5) ─────────────────────────────
+export interface OrderPayment {
+  id: string;
+  order_id: string | null;
+  reservation_id: string | null;
+  amount: number;
+  status: string;
+  mpesa_receipt_number: string | null;
+  refund_status: "none" | "pending" | "refunded" | "failed";
+  refund_amount: number | null;
+  refund_reason: string | null;
+  refund_result_desc: string | null;
+  refunded_at: string | null;
+  created_at: string;
+}
+
+export function useOrderPayments(orderId: string | null | undefined) {
+  return useQuery<OrderPayment[]>({
+    queryKey: ["orderPayments", orderId],
+    enabled: !!orderId,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("payments")
+        .select(
+          "id, order_id, reservation_id, amount, status, mpesa_receipt_number, refund_status, refund_amount, refund_reason, refund_result_desc, refunded_at, created_at",
+        )
+        .eq("order_id", orderId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as OrderPayment[];
+    },
+  });
+}
+
+// Daraja Reversal API. Calls the `mpesa-reversal` edge function which
+// requires admin auth; on success the refund_status flips to 'pending' and
+// the async result callback flips it to 'refunded' or 'failed'.
+export function useRefundPayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      input: { paymentId: string; amount?: number; reason?: string },
+    ) => {
+      const { data, error } = await supabase.functions.invoke<{
+        ok: true;
+        paymentId: string;
+        conversationId?: string;
+      }>("mpesa-reversal", { body: input });
+      if (error) throw new Error(error.message ?? "Refund request failed");
+      if (!data?.ok) throw new Error("Refund returned no confirmation");
+      return data;
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["orderPayments"] });
+      qc.invalidateQueries({ queryKey: ["payments"] });
+      qc.invalidateQueries({ queryKey: ["reconciliation"] });
+    },
+  });
+}
+
+
+// ── Customer-facing: orders that belong to the signed-in user ─────────────
+// RLS (orders_owner_read) lets authenticated users see rows where
+// user_id = auth.uid() OR customer_email matches their auth email. The query
+// here just selects from the table — Postgres filters via the policy.
+export function useMyOrders(userId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["orders", "mine", userId ?? "anon"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("orders")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!userId,
   });
 }

@@ -7,8 +7,9 @@ export const Route = createFileRoute("/admin")({
 
 function AdminLayoutRoute() {
   const location = useLocation();
-  // /admin/login renders standalone, no admin chrome
-  if (location.pathname === "/admin/login") {
+  // /admin/login and /admin/accept-invite render standalone — no admin chrome
+  // and no auth gate (the invite page is reached by unauthenticated users).
+  if (location.pathname === "/admin/login" || location.pathname === "/admin/accept-invite") {
     return <Outlet />;
   }
   return (

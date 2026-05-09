@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
-import { useOrders, useReservations, useMenuItems } from "@/lib/supabase-hooks";
+import { useOrders, useReservations, useMenuItems, useReconciliation } from "@/lib/supabase-hooks";
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
   LineChart, Line, Legend,
 } from "recharts";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { TrendingUp, ShoppingCart, CalendarCheck, DollarSign } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { TrendingUp, ShoppingCart, CalendarCheck, DollarSign, AlertTriangle, CheckCircle2, Download } from "lucide-react";
+import { downloadCsv } from "@/lib/csv-export";
 
 type Range = 7 | 14 | 30 | 90;
 
@@ -112,6 +114,39 @@ export default function AdminAnalytics() {
 
   const loading = lo || lr;
 
+  // Payment reconciliation
+  const sinceISO = useMemo(() => since.toISOString(), [since]);
+  const { data: recon } = useReconciliation(sinceISO);
+  const discrepancyKindLabel: Record<string, string> = {
+    "missing-payment": "Paid order, no M-Pesa record",
+    "orphan-payment": "Payment without paid order",
+    "amount-mismatch": "Amount mismatch",
+  };
+
+  const exportReconciliation = () => {
+    if (!recon) return;
+    const rows = recon.discrepancies.map((d) => ({
+      date: new Date(d.created_at).toISOString(),
+      type: discrepancyKindLabel[d.kind] ?? d.kind,
+      order_number: d.order_number ?? "",
+      order_id: d.order_id ?? "",
+      order_amount: d.order_amount ?? "",
+      payment_amount: d.payment_amount ?? "",
+      mpesa_receipt: d.mpesa_receipt ?? "",
+      payment_id: d.payment_id ?? "",
+    }));
+    downloadCsv(`reconciliation_last_${range}d`, rows, [
+      { header: "Date", value: "date" },
+      { header: "Type", value: "type" },
+      { header: "Order Number", value: "order_number" },
+      { header: "Order ID", value: "order_id" },
+      { header: "Order Amount (KES)", value: "order_amount" },
+      { header: "Payment Amount (KES)", value: "payment_amount" },
+      { header: "M-Pesa Receipt", value: "mpesa_receipt" },
+      { header: "Payment ID", value: "payment_id" },
+    ]);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -198,6 +233,96 @@ export default function AdminAnalytics() {
             </ResponsiveContainer>
           </div>
         </div>
+      </div>
+
+      {/* Payment reconciliation */}
+      <div className="bg-card border border-border rounded-xl p-4">
+        <div className="flex items-start justify-between gap-4 flex-wrap mb-4">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              {recon && recon.discrepancies.length === 0 ? (
+                <CheckCircle2 className="w-4 h-4 text-green-500" />
+              ) : (
+                <AlertTriangle className="w-4 h-4 text-yellow-500" />
+              )}
+              Payment Reconciliation
+            </h2>
+            <p className="text-xs text-muted-foreground mt-1">
+              Cross-checks paid orders against successful M-Pesa payments over the selected window.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportReconciliation}
+            disabled={!recon || recon.discrepancies.length === 0}
+          >
+            <Download className="w-4 h-4 mr-1.5" /> Export CSV
+          </Button>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+          <div className="rounded-lg border border-border p-3">
+            <div className="text-xs text-muted-foreground">Paid orders</div>
+            <div className="text-lg font-semibold">{recon?.paidOrdersCount ?? "—"}</div>
+            <div className="text-xs text-muted-foreground">{recon ? KSH.format(recon.paidOrdersTotal) : ""}</div>
+          </div>
+          <div className="rounded-lg border border-border p-3">
+            <div className="text-xs text-muted-foreground">M-Pesa successes</div>
+            <div className="text-lg font-semibold">{recon?.successPaymentsCount ?? "—"}</div>
+            <div className="text-xs text-muted-foreground">{recon ? KSH.format(recon.successPaymentsTotal) : ""}</div>
+          </div>
+          <div className="rounded-lg border border-border p-3">
+            <div className="text-xs text-muted-foreground">Net difference</div>
+            <div className="text-lg font-semibold">
+              {recon ? KSH.format(recon.paidOrdersTotal - recon.successPaymentsTotal) : "—"}
+            </div>
+          </div>
+          <div className="rounded-lg border border-border p-3">
+            <div className="text-xs text-muted-foreground">Discrepancies</div>
+            <div className={`text-lg font-semibold ${recon && recon.discrepancies.length > 0 ? "text-yellow-500" : ""}`}>
+              {recon?.discrepancies.length ?? "—"}
+            </div>
+          </div>
+        </div>
+
+        {recon && recon.discrepancies.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4 text-center">
+            All paid orders match an M-Pesa receipt for this window. ✅
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-xs text-muted-foreground border-b border-border">
+                  <th className="text-left py-2 pr-3">Date</th>
+                  <th className="text-left py-2 pr-3">Type</th>
+                  <th className="text-left py-2 pr-3">Order #</th>
+                  <th className="text-right py-2 pr-3">Order</th>
+                  <th className="text-right py-2 pr-3">Payment</th>
+                  <th className="text-left py-2">Receipt</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recon?.discrepancies.slice(0, 50).map((d, i) => (
+                  <tr key={i} className="border-b border-border/50">
+                    <td className="py-2 pr-3 whitespace-nowrap">{new Date(d.created_at).toLocaleString()}</td>
+                    <td className="py-2 pr-3">{discrepancyKindLabel[d.kind] ?? d.kind}</td>
+                    <td className="py-2 pr-3 font-mono text-xs">{d.order_number ?? "—"}</td>
+                    <td className="py-2 pr-3 text-right">{d.order_amount != null ? KSH.format(d.order_amount) : "—"}</td>
+                    <td className="py-2 pr-3 text-right">{d.payment_amount != null ? KSH.format(d.payment_amount) : "—"}</td>
+                    <td className="py-2 font-mono text-xs">{d.mpesa_receipt ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {recon && recon.discrepancies.length > 50 && (
+              <p className="text-xs text-muted-foreground mt-2">
+                Showing first 50 of {recon.discrepancies.length}. Use "Export CSV" for the full list.
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -441,12 +441,16 @@ export function useUnreadMessageCount() {
 }
 
 // ─── ORDERS ────────────────────────────────────────────────────────────────
-export function useOrders(opts?: { status?: string; search?: string }) {
+export function useOrders(opts?: { status?: string; search?: string; includeUnpaid?: boolean }) {
   return useQuery({
     queryKey: ["orders", opts],
     queryFn: async () => {
       let q = supabase.from("orders").select("*").order("created_at", { ascending: false });
       if (opts?.status) q = q.eq("status", opts.status);
+      // Enforce "pay first": hide orders that haven't completed M-Pesa payment
+      // from admin views. Customers can still poll their own order via the
+      // tracking page (useOrderByNumber) regardless of payment status.
+      if (!opts?.includeUnpaid) q = q.neq("payment_status", "pending");
       if (opts?.search) q = q.or(`order_number.ilike.%${opts.search}%,customer_name.ilike.%${opts.search}%,customer_phone.ilike.%${opts.search}%`);
       const { data, error } = await q;
       if (error) throw error;
@@ -564,7 +568,7 @@ export function useOrderStats() {
   return useQuery({
     queryKey: ["orderStats"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("orders").select("status");
+      const { data, error } = await supabase.from("orders").select("status").neq("payment_status", "pending");
       if (error) throw error;
       const all = data ?? [];
       return {
@@ -577,7 +581,115 @@ export function useOrderStats() {
   });
 }
 
-// ─── ADMIN ─────────────────────────────────────────────────────────────────
+// ─── PAYMENT RECONCILIATION ────────────────────────────────────────────────
+// Cross-checks the `payments` table against `orders` over a date window so
+// admins can spot:
+//   • paid orders with no successful M-Pesa payment row (manual / cash / data drift)
+//   • successful payments with no matching paid order (orphans / refund needed)
+//   • amount mismatches between order.total_amount and payment.amount
+export interface ReconciliationDiscrepancy {
+  kind: "missing-payment" | "orphan-payment" | "amount-mismatch";
+  order_id?: string;
+  order_number?: string | null;
+  payment_id?: string;
+  mpesa_receipt?: string | null;
+  order_amount?: number;
+  payment_amount?: number;
+  created_at: string;
+}
+export interface ReconciliationResult {
+  paidOrdersCount: number;
+  paidOrdersTotal: number;
+  successPaymentsCount: number;
+  successPaymentsTotal: number;
+  discrepancies: ReconciliationDiscrepancy[];
+}
+
+export function useReconciliation(sinceISO: string) {
+  return useQuery<ReconciliationResult>({
+    queryKey: ["reconciliation", sinceISO],
+    queryFn: async () => {
+      const [ordersRes, paymentsRes] = await Promise.all([
+        supabase
+          .from("orders")
+          .select("id, order_number, total_amount, payment_status, created_at")
+          .eq("payment_status", "paid")
+          .gte("created_at", sinceISO),
+        (supabase as any)
+          .from("payments")
+          .select("id, order_id, amount, status, mpesa_receipt_number, created_at")
+          .eq("status", "success")
+          .gte("created_at", sinceISO),
+      ]);
+      if (ordersRes.error) throw ordersRes.error;
+      if (paymentsRes.error) throw paymentsRes.error;
+
+      const paidOrders = (ordersRes.data ?? []) as any[];
+      const successPayments = (paymentsRes.data ?? []) as any[];
+
+      const paymentsByOrder = new Map<string, any[]>();
+      for (const p of successPayments) {
+        const arr = paymentsByOrder.get(p.order_id) ?? [];
+        arr.push(p);
+        paymentsByOrder.set(p.order_id, arr);
+      }
+      const paidOrderIds = new Set(paidOrders.map((o) => o.id));
+
+      const discrepancies: ReconciliationDiscrepancy[] = [];
+
+      for (const o of paidOrders) {
+        const ps = paymentsByOrder.get(o.id);
+        if (!ps || ps.length === 0) {
+          discrepancies.push({
+            kind: "missing-payment",
+            order_id: o.id,
+            order_number: o.order_number,
+            order_amount: Number(o.total_amount ?? 0),
+            created_at: o.created_at,
+          });
+          continue;
+        }
+        const paidSum = ps.reduce((s, p) => s + Number(p.amount ?? 0), 0);
+        const orderAmt = Math.round(Number(o.total_amount ?? 0));
+        if (Math.abs(paidSum - orderAmt) > 0.5) {
+          discrepancies.push({
+            kind: "amount-mismatch",
+            order_id: o.id,
+            order_number: o.order_number,
+            payment_id: ps[0].id,
+            mpesa_receipt: ps[0].mpesa_receipt_number,
+            order_amount: orderAmt,
+            payment_amount: paidSum,
+            created_at: o.created_at,
+          });
+        }
+      }
+
+      for (const p of successPayments) {
+        if (!paidOrderIds.has(p.order_id)) {
+          discrepancies.push({
+            kind: "orphan-payment",
+            payment_id: p.id,
+            order_id: p.order_id,
+            mpesa_receipt: p.mpesa_receipt_number,
+            payment_amount: Number(p.amount ?? 0),
+            created_at: p.created_at,
+          });
+        }
+      }
+
+      return {
+        paidOrdersCount: paidOrders.length,
+        paidOrdersTotal: paidOrders.reduce((s, o) => s + Number(o.total_amount ?? 0), 0),
+        successPaymentsCount: successPayments.length,
+        successPaymentsTotal: successPayments.reduce((s, p) => s + Number(p.amount ?? 0), 0),
+        discrepancies: discrepancies.sort(
+          (a, b) => +new Date(b.created_at) - +new Date(a.created_at),
+        ),
+      };
+    },
+  });
+}
 export function useAdminDashboardStats() {
   return useQuery({
     queryKey: ["adminDashboard"],

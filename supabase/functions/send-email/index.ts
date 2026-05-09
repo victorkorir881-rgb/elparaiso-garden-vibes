@@ -38,7 +38,8 @@ type TemplateName =
   | "reservation_confirmation"
   | "contact_ack"
   | "order_confirmation"
-  | "order_status_update";
+  | "order_status_update"
+  | "order_payment_receipt";
 
 interface RequestBody {
   template: TemplateName;
@@ -144,6 +145,22 @@ function renderOrderStatusUpdate(o: any, newStatus: string) {
   return { subject, html: body };
 }
 
+function renderOrderPaymentReceipt(o: any, p: any) {
+  const subject = `Payment received — Order #${String(o.id).slice(0, 8)}`;
+  const body = wrap("Payment received", html`
+    <h2 style="font-size:20px;margin:0 0 12px;">Asante, ${o.customer_name}!</h2>
+    <p>We've received your M-Pesa payment for order <strong>#${String(o.id).slice(0, 8)}</strong>. Your order is now confirmed and being prepared.</p>
+    <table style="border-collapse:collapse;margin:16px 0;font-size:14px;">
+      <tr><td style="padding:6px 12px 6px 0;color:#6b7280;">Amount paid</td><td>KES ${html`${p?.amount ?? o.total ?? "—"}`}</td></tr>
+      <tr><td style="padding:6px 12px 6px 0;color:#6b7280;">M-Pesa receipt</td><td>${html`${p?.mpesa_receipt_number ?? "—"}`}</td></tr>
+      <tr><td style="padding:6px 12px 6px 0;color:#6b7280;">Phone</td><td>${html`${p?.phone ?? o.customer_phone ?? "—"}`}</td></tr>
+    </table>
+    <p>Track your order: <a href="https://elparaisogardens.vercel.app/track" style="color:#c9a96e;">elparaisogardens.vercel.app/track</a></p>
+    <p style="margin-top:24px;">Karibu tena,<br/><strong>The Elparaiso Team</strong></p>
+  `);
+  return { subject, html: body };
+}
+
 Deno.serve((req) => withTimedLog("send-email", async () => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405, headers: corsHeaders });
@@ -206,6 +223,19 @@ Deno.serve((req) => withTimedLog("send-email", async () => {
       if (error || !data) throw new Error("order_not_found");
       to = data.customer_email ?? null;
       ({ subject, html: htmlBody } = renderOrderStatusUpdate(data, body.status));
+    } else if (body.template === "order_payment_receipt") {
+      const { data, error } = await supabase.from("orders").select("*").eq("id", body.recordId).single();
+      if (error || !data) throw new Error("order_not_found");
+      const { data: pay } = await supabase
+        .from("payments")
+        .select("amount, mpesa_receipt_number, phone, status, completed_at")
+        .eq("order_id", body.recordId)
+        .eq("status", "success")
+        .order("completed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      to = data.customer_email ?? null;
+      ({ subject, html: htmlBody } = renderOrderPaymentReceipt(data, pay));
     } else {
       return new Response(JSON.stringify({ error: "unknown_template" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },

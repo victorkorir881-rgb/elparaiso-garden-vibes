@@ -1,11 +1,12 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Manrope:wght@300;400;500;600;700;800&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-display: 'Playfair Display', serif;
+  --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Cormorant Garamond', ui-serif, Georgia, serif;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -45,46 +46,53 @@
 }
 
 :root {
-  /* Elparaiso Garden — Dark Premium Theme */
-  --radius: 0.625rem;
-  /* Brand palette */
-  --brand-gold: oklch(72% 0.14 65);
-  --brand-amber: oklch(68% 0.16 60);
-  --brand-gold-muted: oklch(60% 0.10 65);
-  --brand-ivory: oklch(94% 0.01 80);
+  /* Elparaiso Garden — Refined Dark Premium */
+  --radius: 0.5rem;
+  /* Brand palette — restrained warm gold */
+  --brand-gold: oklch(74% 0.11 75);
+  --brand-gold-soft: oklch(80% 0.08 80);
+  --brand-gold-deep: oklch(58% 0.10 70);
+  --brand-ivory: oklch(95% 0.012 85);
   /* Semantic tokens */
-  --background: oklch(12% 0.01 60);
-  --foreground: oklch(92% 0.01 80);
-  --card: oklch(16% 0.015 55);
-  --card-foreground: oklch(92% 0.01 80);
-  --popover: oklch(18% 0.015 55);
-  --popover-foreground: oklch(92% 0.01 80);
-  --primary: oklch(72% 0.14 65);
-  --primary-foreground: oklch(12% 0.01 60);
-  --secondary: oklch(22% 0.025 55);
-  --secondary-foreground: oklch(88% 0.01 80);
-  --muted: oklch(22% 0.015 55);
-  --muted-foreground: oklch(60% 0.02 60);
-  --accent: oklch(28% 0.04 55);
-  --accent-foreground: oklch(88% 0.01 80);
-  --destructive: oklch(55% 0.22 25);
+  --background: oklch(11% 0.008 60);
+  --foreground: oklch(94% 0.012 85);
+  --card: oklch(14% 0.012 55);
+  --card-foreground: oklch(94% 0.012 85);
+  --popover: oklch(15% 0.014 55);
+  --popover-foreground: oklch(94% 0.012 85);
+  --primary: oklch(74% 0.11 75);
+  --primary-foreground: oklch(11% 0.008 60);
+  --secondary: oklch(19% 0.018 55);
+  --secondary-foreground: oklch(90% 0.012 85);
+  --muted: oklch(18% 0.012 55);
+  --muted-foreground: oklch(65% 0.018 70);
+  --accent: oklch(24% 0.03 55);
+  --accent-foreground: oklch(92% 0.012 85);
+  --destructive: oklch(55% 0.20 25);
   --destructive-foreground: oklch(98% 0.005 0);
-  --border: oklch(25% 0.02 55);
-  --input: oklch(20% 0.015 55);
-  --ring: oklch(72% 0.14 65);
-  --chart-1: oklch(72% 0.14 65);
-  --chart-2: oklch(60% 0.12 155);
-  --chart-3: oklch(65% 0.15 30);
-  --chart-4: oklch(70% 0.12 200);
-  --chart-5: oklch(68% 0.16 60);
-  --sidebar: oklch(10% 0.008 60);
-  --sidebar-foreground: oklch(88% 0.01 80);
-  --sidebar-primary: oklch(72% 0.14 65);
-  --sidebar-primary-foreground: oklch(12% 0.01 60);
-  --sidebar-accent: oklch(18% 0.015 55);
-  --sidebar-accent-foreground: oklch(88% 0.01 80);
-  --sidebar-border: oklch(22% 0.015 55);
-  --sidebar-ring: oklch(72% 0.14 65);
+  --border: oklch(22% 0.014 55 / 0.7);
+  --input: oklch(18% 0.014 55);
+  --ring: oklch(74% 0.11 75);
+  --chart-1: oklch(74% 0.11 75);
+  --chart-2: oklch(60% 0.10 155);
+  --chart-3: oklch(65% 0.13 30);
+  --chart-4: oklch(70% 0.10 200);
+  --chart-5: oklch(80% 0.08 80);
+  --sidebar: oklch(9% 0.006 60);
+  --sidebar-foreground: oklch(90% 0.012 85);
+  --sidebar-primary: oklch(74% 0.11 75);
+  --sidebar-primary-foreground: oklch(11% 0.008 60);
+  --sidebar-accent: oklch(16% 0.014 55);
+  --sidebar-accent-foreground: oklch(90% 0.012 85);
+  --sidebar-border: oklch(20% 0.014 55);
+  --sidebar-ring: oklch(74% 0.11 75);
+
+  /* Premium effect tokens */
+  --gradient-gold: linear-gradient(135deg, oklch(78% 0.10 80), oklch(66% 0.11 70));
+  --gradient-surface: linear-gradient(180deg, oklch(14% 0.012 55), oklch(11% 0.008 60));
+  --shadow-soft: 0 1px 2px oklch(0% 0 0 / 0.25), 0 8px 24px -12px oklch(0% 0 0 / 0.5);
+  --shadow-elegant: 0 1px 0 oklch(74% 0.11 75 / 0.06) inset, 0 24px 60px -28px oklch(0% 0 0 / 0.7);
+  --shadow-gold: 0 8px 28px -12px oklch(74% 0.11 75 / 0.35);
 }
 
 /* Dark is the only theme for Elparaiso — no .dark override needed */
@@ -96,9 +104,18 @@
   html { scroll-behavior: smooth; }
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: 'Inter', sans-serif;
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11";
+    letter-spacing: -0.005em;
   }
-  h1, h2, h3 { font-family: 'Playfair Display', serif; }
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    letter-spacing: -0.015em;
+    line-height: 1.1;
+  }
+  h1 { font-weight: 600; }
+  p { line-height: 1.65; }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
   [type="button"]:not(:disabled),
@@ -110,25 +127,48 @@
   input[type="radio"]:not(:disabled) {
     @apply cursor-pointer;
   }
-  ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: oklch(10% 0.008 60); }
-  ::-webkit-scrollbar-thumb { background: oklch(28% 0.04 50); border-radius: 3px; }
-  ::-webkit-scrollbar-thumb:hover { background: oklch(60% 0.10 65); }
+  ::selection { background: oklch(74% 0.11 75 / 0.25); color: oklch(95% 0.012 85); }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: oklch(9% 0.006 60); }
+  ::-webkit-scrollbar-thumb { background: oklch(24% 0.03 55); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: oklch(58% 0.10 70); }
 }
 
 @layer components {
-  .text-gold { color: oklch(72% 0.14 65); }
-  .bg-gold { background-color: oklch(72% 0.14 65); }
-  .border-gold { border-color: oklch(72% 0.14 65); }
-  .text-ivory { color: oklch(94% 0.01 80); }
-  .section-padding { @apply py-16 md:py-24; }
-  .section-title { font-family: 'Playfair Display', serif; @apply text-3xl md:text-4xl lg:text-5xl font-bold; }
-  .gold-divider {
-    width: 4rem; height: 3px; border-radius: 9999px;
-    background: linear-gradient(90deg, oklch(72% 0.14 65), oklch(68% 0.16 60));
+  .text-gold { color: var(--brand-gold); }
+  .bg-gold { background: var(--gradient-gold); }
+  .border-gold { border-color: var(--brand-gold); }
+  .text-ivory { color: var(--brand-ivory); }
+
+  .section-padding { @apply py-20 md:py-28; }
+  .section-title {
+    font-family: var(--font-display);
+    @apply text-4xl md:text-5xl lg:text-6xl;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
   }
-  .card-hover { @apply transition-all duration-300 hover:shadow-xl hover:-translate-y-1; }
+  .gold-divider {
+    width: 3rem; height: 1px; border-radius: 9999px;
+    background: linear-gradient(90deg, transparent, var(--brand-gold), transparent);
+  }
+  .eyebrow {
+    font-family: var(--font-sans);
+    font-size: 0.72rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    font-weight: 500;
+    color: var(--brand-gold);
+  }
+  .surface-elevated {
+    background: var(--gradient-surface);
+    box-shadow: var(--shadow-elegant);
+    border: 1px solid var(--border);
+  }
+  .card-hover { @apply transition-all duration-300; }
+  .card-hover:hover { border-color: oklch(74% 0.11 75 / 0.4); }
 }
+
 
 /* ============================================================
    Subtle entrance animation — opt-in only.

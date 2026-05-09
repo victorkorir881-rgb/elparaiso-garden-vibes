@@ -163,10 +163,11 @@ External Supabase is the production database. **Every schema change ships as a n
 - [x] **7.1** `sql/0003_payments.sql` — payments table with status, provider, reference, amount, currency, idempotency. (done)
 - [x] **7.2** Edge function `mpesa-initiate` — Daraja OAuth + STK Push. (done — `supabase/functions/mpesa-initiate/`)
 - [x] **7.3** Webhook `mpesa-callback` — signature/token verification, update payment + order status. (done — `supabase/functions/mpesa-callback/`)
+- [x] **7.3b** Receipt notification (email + SMS) when reconciliation flips order to paid. (done: 2026-05-09 — new `order_payment_receipt` template in `send-email`/`send-sms`; `mpesa-callback` fires both fire-and-forget after `payment_status` transitions to `paid`, guarded by a "wasUnpaid" check + 5-min idempotency in the senders so Daraja replays don't double-send.)
 - [x] **7.4** Add payment UI on Order checkout. (done — `src/pages/public/OrderPage.tsx` + `src/lib/payments.ts`)
 - [ ] **7.4b** Add deposit payment on Reservations form. (pending)
 - [ ] **7.5** Automated refund flow in Admin Orders (Daraja Reversal API). Manual refunds work today.
-- [ ] **7.6** Reconciliation report in Admin Analytics.
+- [x] **7.6** Reconciliation report in Admin Analytics. (done: 2026-05-09 — `useReconciliation(sinceISO)` cross-checks paid orders vs successful `payments` rows over the selected analytics window; surfaces missing payments, orphan payments, and amount mismatches with KPI cards, a discrepancy table, and CSV export.)
 - [ ] **7.7** Owner step: deploy edge functions + set Daraja secrets per `docs/07_PAYMENTS_MPESA.md`.
 
 ---

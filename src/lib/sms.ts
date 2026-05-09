@@ -10,7 +10,8 @@ import { supabase } from "@/integrations/supabase/client";
 export type SmsTemplate =
   | "reservation_confirmation"
   | "order_confirmation"
-  | "order_status_update";
+  | "order_status_update"
+  | "order_payment_receipt";
 
 export interface SendTransactionalSmsArgs {
   template: SmsTemplate;

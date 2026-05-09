@@ -41,7 +41,8 @@ const corsHeaders = {
 type TemplateName =
   | "reservation_confirmation"
   | "order_confirmation"
-  | "order_status_update";
+  | "order_status_update"
+  | "order_payment_receipt";
 
 interface RequestBody {
   template: TemplateName;
@@ -86,7 +87,12 @@ function renderOrderStatus(o: any, status: string): string {
   return `Hi ${o.customer_name ?? ""}, your order ${o.order_number} ${phrase}. — Elparaiso Garden Kisii`.trim();
 }
 
-async function recentlySent(
+function renderOrderPaymentReceipt(o: any, p: any): string {
+  const amt = p?.amount ?? o.total_amount;
+  const amtStr = amt != null ? ` KSh ${Number(amt).toLocaleString()}` : "";
+  const rcpt = p?.mpesa_receipt_number ? ` Receipt: ${p.mpesa_receipt_number}.` : "";
+  return `Asante ${o.customer_name ?? ""}! Payment${amtStr} for order ${o.order_number} received.${rcpt} Order is now confirmed. — Elparaiso Garden Kisii`.trim();
+}
   admin: ReturnType<typeof createClient>,
   key: string,
 ): Promise<boolean> {
@@ -119,7 +125,7 @@ Deno.serve((req) => withTimedLog("send-sms", async () => {
     return new Response(JSON.stringify({ error: "invalid_json" }), { status: 400, headers: { ...corsHeaders, "content-type": "application/json" } });
   }
 
-  const ALLOWED: TemplateName[] = ["reservation_confirmation", "order_confirmation", "order_status_update"];
+  const ALLOWED: TemplateName[] = ["reservation_confirmation", "order_confirmation", "order_status_update", "order_payment_receipt"];
   if (!body?.template || !ALLOWED.includes(body.template) || !body?.recordId) {
     return new Response(JSON.stringify({ error: "bad_request" }), { status: 400, headers: { ...corsHeaders, "content-type": "application/json" } });
   }
@@ -157,6 +163,19 @@ Deno.serve((req) => withTimedLog("send-sms", async () => {
     if (error || !data) return new Response(JSON.stringify({ error: "record_not_found" }), { status: 404, headers: { ...corsHeaders, "content-type": "application/json" } });
     phone = normalizeKePhone(data.customer_phone);
     message = renderOrderStatus(data, body.status);
+  } else if (body.template === "order_payment_receipt") {
+    const { data, error } = await admin.from("orders").select("*").eq("id", body.recordId).single();
+    if (error || !data) return new Response(JSON.stringify({ error: "record_not_found" }), { status: 404, headers: { ...corsHeaders, "content-type": "application/json" } });
+    const { data: pay } = await admin
+      .from("payments")
+      .select("amount, mpesa_receipt_number, phone, status, completed_at")
+      .eq("order_id", body.recordId)
+      .eq("status", "success")
+      .order("completed_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    phone = normalizeKePhone(pay?.phone ?? data.customer_phone);
+    message = renderOrderPaymentReceipt(data, pay);
   }
 
   if (!phone) {

@@ -36,7 +36,9 @@ export default function OrderPage() {
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [orderType, setOrderType] = useState<"dine-in" | "takeaway" | "delivery">("delivery");
-  const [paymentChoice, setPaymentChoice] = useState<"mpesa" | "cash">("mpesa");
+  // M-Pesa is the only accepted payment method — orders are not visible to
+  // admins until payment_status flips to "paid" via the Daraja callback.
+  const paymentChoice = "mpesa" as const;
   const [customerName, setCustomerName] = useState("");
   // Phone is captured WITHOUT country code; we always store the local 9-digit part.
   const [phoneLocal, setPhoneLocal] = useState("");
@@ -146,14 +148,8 @@ export default function OrderPage() {
           setOrderNumber(ordNum);
           setPendingOrderId(created.id);
 
-          if (paymentChoice === "cash") {
-            toast.success("Order placed! Pay on delivery / pickup.");
-            setOrderPlaced(true);
-            clearCart();
-            setIsCheckingOut(false);
-            return;
-          }
-
+          // M-Pesa is the only accepted method. Trigger STK push immediately;
+          // the order remains hidden from admins until payment succeeds.
           initiatePayment.mutate(
             { orderId: created.id, phone: fullPhone, amount: amountKes },
             {
@@ -163,9 +159,7 @@ export default function OrderPage() {
                 toast.success(res.message);
               },
               onError: (err) => {
-                toast.error(err.message ?? "Failed to start M-Pesa payment");
-                setOrderPlaced(true);
-                clearCart();
+                toast.error(err.message ?? "Failed to start M-Pesa payment. Order not submitted.");
                 setIsCheckingOut(false);
               },
             },
@@ -538,35 +532,18 @@ export default function OrderPage() {
 
                     <Card className="p-4">
                       <label className="text-sm font-medium mb-2 block">Payment Method</label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setPaymentChoice("mpesa")}
-                          className={cn(
-                            "p-3 rounded-md border text-left transition-colors",
-                            paymentChoice === "mpesa" ? "border-primary bg-primary/5 ring-2 ring-primary/30" : "border-border hover:border-primary/40",
-                          )}
-                        >
-                          <div className="flex items-center gap-2 font-medium text-sm"><Smartphone className="w-4 h-4 text-primary" />M-Pesa</div>
-                          <p className="text-xs text-foreground/60 mt-1">Pay now via STK push</p>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPaymentChoice("cash")}
-                          className={cn(
-                            "p-3 rounded-md border text-left transition-colors",
-                            paymentChoice === "cash" ? "border-primary bg-primary/5 ring-2 ring-primary/30" : "border-border hover:border-primary/40",
-                          )}
-                        >
-                          <div className="flex items-center gap-2 font-medium text-sm"><CreditCard className="w-4 h-4 text-primary" />Cash</div>
-                          <p className="text-xs text-foreground/60 mt-1">Pay on delivery / pickup</p>
-                        </button>
-                      </div>
-                      {paymentChoice === "mpesa" && (
-                        <p className="text-xs text-foreground/60 mt-3">
-                          You'll get an STK push prompt on <span className="font-medium text-foreground">{fullPhone}</span>. Enter your M-Pesa PIN to confirm.
+                      <div className="p-3 rounded-md border border-primary bg-primary/5 ring-2 ring-primary/30">
+                        <div className="flex items-center gap-2 font-medium text-sm">
+                          <Smartphone className="w-4 h-4 text-primary" /> M-Pesa (required)
+                        </div>
+                        <p className="text-xs text-foreground/60 mt-1">
+                          Pay now via STK push. Your order will be sent to the kitchen
+                          only after payment is confirmed.
                         </p>
-                      )}
+                      </div>
+                      <p className="text-xs text-foreground/60 mt-3">
+                        You'll get an STK push prompt on <span className="font-medium text-foreground">{fullPhone}</span>. Enter your M-Pesa PIN to confirm.
+                      </p>
                     </Card>
 
                     <div className="flex gap-2">

@@ -97,6 +97,16 @@ Deno.serve((req) => withTimedLog("mpesa-callback", async () => {
       .eq("id", payment.id);
 
     if (newStatus === "success") {
+      // Only fire receipt notifications if the order isn't already marked paid
+      // (defensive: avoids double-sends if Daraja replays the callback).
+      const { data: orderRow } = await supabase
+        .from("orders")
+        .select("payment_status")
+        .eq("id", payment.order_id)
+        .single();
+
+      const wasUnpaid = orderRow?.payment_status !== "paid";
+
       await supabase
         .from("orders")
         .update({
@@ -104,6 +114,30 @@ Deno.serve((req) => withTimedLog("mpesa-callback", async () => {
           payment_method: "mpesa",
         })
         .eq("id", payment.order_id);
+
+      if (wasUnpaid) {
+        // Fire-and-forget receipt notifications. The send-email and send-sms
+        // functions have their own 5-minute idempotency window, so retries
+        // by Daraja still won't double-send.
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const invoke = (fn: string) =>
+          fetch(`${supabaseUrl}/functions/v1/${fn}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${serviceKey}`,
+              "apikey": serviceKey,
+            },
+            body: JSON.stringify({
+              template: "order_payment_receipt",
+              recordId: payment.order_id,
+            }),
+          }).catch((e) => console.warn(`mpesa-callback: ${fn} invoke failed`, e));
+        // Don't await — fire-and-forget so we ACK Daraja quickly.
+        void invoke("send-email");
+        void invoke("send-sms");
+      }
     }
 
     return ackResponse();

@@ -11,7 +11,8 @@ export type EmailTemplate =
   | "reservation_confirmation"
   | "contact_ack"
   | "order_confirmation"
-  | "order_status_update";
+  | "order_status_update"
+  | "order_payment_receipt";
 
 export interface SendTransactionalEmailArgs {
   template: EmailTemplate;

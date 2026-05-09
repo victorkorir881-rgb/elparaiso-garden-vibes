@@ -1,11 +1,114 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useOrdersByPhone, useOrderByNumber } from "@/lib/supabase-hooks";
+import { useInitiateMpesaPayment, usePaymentStatus } from "@/lib/payments";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Phone, Clock, MapPin, CheckCircle2, AlertCircle } from "lucide-react";
+import { Loader2, Phone, Clock, MapPin, CheckCircle2, AlertCircle, Smartphone } from "lucide-react";
+import { toast } from "sonner";
 import PublicLayout from "@/components/public/PublicLayout";
+
+/** Normalises Kenyan numbers to "2547XXXXXXXX" / "2541XXXXXXXX". */
+function normalisePhoneToE164(raw: string): string | null {
+  const d = String(raw ?? "").replace(/\D/g, "");
+  if (/^254[17]\d{8}$/.test(d)) return d;
+  if (/^0[17]\d{8}$/.test(d)) return "254" + d.slice(1);
+  if (/^[17]\d{8}$/.test(d)) return "254" + d;
+  return null;
+}
+
+function RetryPaymentButton({ order }: { order: any }) {
+  const [paymentId, setPaymentId] = useState<string | null>(null);
+  const [phoneOverride, setPhoneOverride] = useState("");
+  const [askPhone, setAskPhone] = useState(false);
+  const initiate = useInitiateMpesaPayment();
+  const { data: payment } = usePaymentStatus(paymentId);
+
+  const amount = Math.max(1, Math.round(parseFloat(order.total_amount)));
+  const orderPhone = normalisePhoneToE164(order.customer_phone);
+
+  useEffect(() => {
+    if (!payment) return;
+    if (payment.status === "success") {
+      toast.success(`Payment received${payment.mpesa_receipt_number ? ` (${payment.mpesa_receipt_number})` : ""}!`);
+      setPaymentId(null);
+    } else if (["failed", "cancelled", "timeout"].includes(payment.status)) {
+      toast.error(payment.result_desc ?? `Payment ${payment.status}.`);
+      setPaymentId(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payment?.status]);
+
+  const send = (phone: string) => {
+    initiate.mutate(
+      { orderId: order.id, phone, amount },
+      {
+        onSuccess: (res) => {
+          setPaymentId(res.paymentId);
+          setAskPhone(false);
+          toast.success(res.message);
+        },
+        onError: (err) => toast.error(err.message ?? "Failed to start M-Pesa payment"),
+      },
+    );
+  };
+
+  const handleClick = () => {
+    if (!orderPhone) {
+      setAskPhone(true);
+      return;
+    }
+    send(orderPhone);
+  };
+
+  const submitting = initiate.isPending || (paymentId !== null && (!payment || payment.status === "pending"));
+
+  return (
+    <div className="mt-3 space-y-2">
+      {askPhone ? (
+        <div className="flex gap-2">
+          <Input
+            type="tel"
+            inputMode="numeric"
+            placeholder="07XX XXX XXX"
+            value={phoneOverride}
+            onChange={(e) => setPhoneOverride(e.target.value)}
+            className="flex-1"
+          />
+          <Button
+            size="sm"
+            disabled={submitting}
+            onClick={() => {
+              const p = normalisePhoneToE164(phoneOverride);
+              if (!p) {
+                toast.error("Enter a valid Kenyan mobile number");
+                return;
+              }
+              send(p);
+            }}
+          >
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send"}
+          </Button>
+        </div>
+      ) : (
+        <Button size="sm" className="w-full" onClick={handleClick} disabled={submitting}>
+          {submitting ? (
+            <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Waiting for confirmation…</>
+          ) : (
+            <><Smartphone className="w-4 h-4 mr-2" />Retry M-Pesa Payment</>
+          )}
+        </Button>
+      )}
+      {paymentId && payment?.status === "pending" && (
+        <p className="text-xs text-foreground/60 text-center">
+          Check your phone and enter your M-Pesa PIN to pay KES {amount.toLocaleString()}.
+        </p>
+      )}
+    </div>
+  );
+}
+
 
 const statusColors: Record<string, { bg: string; text: string; icon: React.ReactNode }> = {
   pending: { bg: "bg-yellow-50", text: "text-yellow-700", icon: <Clock className="w-5 h-5" /> },
@@ -152,6 +255,9 @@ export default function OrderTrackingPage() {
                       <div>
                         <p className="text-sm text-foreground/60 mb-1">Payment Status</p>
                         <Badge variant={order.payment_status === "paid" ? "default" : "secondary"} className="capitalize">{order.payment_status}</Badge>
+                        {order.payment_status === "pending" && order.status !== "cancelled" && (
+                          <RetryPaymentButton order={order} />
+                        )}
                       </div>
                     </div>
                   </div>

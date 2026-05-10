@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useCreateOrder, useSettings } from "@/lib/supabase-hooks";
-import { useInitiateMpesaPayment, usePaymentStatus } from "@/lib/payments";
+import { useInitiateMpesaPayment, usePaymentStatus, useClaimManualPayment } from "@/lib/payments";
 import { useCart } from "@/contexts/CartContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,6 +46,7 @@ export default function OrderPage() {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [orderNumber, setOrderNumber] = useState("");
+  const [pendingVerification, setPendingVerification] = useState(false);
 
   const [step, setStep] = useState<Step>(1);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -58,6 +59,9 @@ export default function OrderPage() {
 
   const initiatePayment = useInitiateMpesaPayment();
   const { data: paymentRow, refetch: refetchPayment } = usePaymentStatus(paymentId);
+  const claimManual = useClaimManualPayment();
+  const [manualRef, setManualRef] = useState("");
+  const [manualSubmitted, setManualSubmitted] = useState(false);
   const createOrder = useCreateOrder();
   const { data: settings } = useSettings();
 
@@ -83,6 +87,7 @@ export default function OrderPage() {
     if (paymentRow.status === "success") {
       toast.success(`Payment received${paymentRow.mpesa_receipt_number ? ` (${paymentRow.mpesa_receipt_number})` : ""}!`);
       setOrderPlaced(true);
+      setPendingVerification(false);
       setPaymentOpen(false);
       setPaymentId(null);
       setPaymentTimedOut(false);
@@ -92,8 +97,22 @@ export default function OrderPage() {
       toast.error(paymentRow.result_desc ?? `Payment ${paymentRow.status}. Please try again.`);
       setIsCheckingOut(false);
     }
+    // React to admin decisions on a manual M-Pesa claim.
+    if (paymentRow.manual_claim_status === "rejected") {
+      toast.error(
+        paymentRow.manual_notes
+          ? `Payment reference rejected: ${paymentRow.manual_notes}`
+          : "Admin couldn't verify your M-Pesa reference. Please retry payment.",
+      );
+      setPendingVerification(false);
+      setOrderPlaced(false);
+      setManualSubmitted(false);
+      setManualRef("");
+      setPaymentTimedOut(true);
+      setPaymentOpen(true);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paymentRow?.status]);
+  }, [paymentRow?.status, paymentRow?.manual_claim_status]);
 
   const fullPhone = phoneLocal ? `254${phoneLocal}` : "";
   const phoneValid = isValidLocalMobile(phoneLocal);
@@ -205,9 +224,17 @@ export default function OrderPage() {
                 <Check className="w-9 h-9 text-primary-foreground" strokeWidth={3} />
               </div>
             </div>
-            <Badge variant="outline" className="mb-3 border-primary/40 text-primary">Order confirmed</Badge>
-            <h1 className="text-3xl sm:text-5xl font-bold font-display mb-3 tracking-tight">Thank you for your order</h1>
-            <p className="text-foreground/60 mb-8 text-base sm:text-lg">We've received your order and the kitchen is on it.</p>
+            <Badge variant="outline" className="mb-3 border-primary/40 text-primary">
+              {pendingVerification ? "Awaiting payment verification" : "Order confirmed"}
+            </Badge>
+            <h1 className="text-3xl sm:text-5xl font-bold font-display mb-3 tracking-tight">
+              {pendingVerification ? "Thanks — we're verifying your payment" : "Thank you for your order"}
+            </h1>
+            <p className="text-foreground/60 mb-8 text-base sm:text-lg">
+              {pendingVerification
+                ? "Our team is cross-checking the M-Pesa reference you provided. You'll get an SMS and email the moment it's approved."
+                : "We've received your order and the kitchen is on it."}
+            </p>
             <Card className="p-6 sm:p-8 mb-8 border-primary/20" style={{ background: "var(--gradient-surface)", boxShadow: "var(--shadow-elegant)" }}>
               <div className="grid sm:grid-cols-2 gap-4 text-left">
                 <div>
@@ -661,16 +688,64 @@ export default function OrderPage() {
                 )}
 
                 {(!paymentRow || paymentRow.status === "pending") && paymentTimedOut && (
-                  <div className="py-4 space-y-3">
+                  <div className="py-4 space-y-3 text-left">
                     <p className="text-amber-400 text-sm">
-                      We didn't receive a confirmation from M-Pesa. If you completed payment, tap "Check status". Otherwise, retry the prompt.
+                      We didn't receive a confirmation from M-Pesa. If you completed payment, enter the M-Pesa reference code from the SMS — admin will verify and confirm your order. Otherwise, retry the prompt.
                     </p>
-                    <div className="flex flex-col sm:flex-row gap-2">
+
+                    <div className="space-y-2 rounded-lg border border-border bg-background/40 p-3">
+                      <label className="text-xs font-medium text-foreground/70 block">
+                        M-Pesa reference code
+                      </label>
+                      <Input
+                        value={manualRef}
+                        onChange={(e) => setManualRef(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20))}
+                        placeholder="e.g. QGH7X8Y9ZA"
+                        maxLength={20}
+                        className="font-mono uppercase"
+                        disabled={claimManual.isPending || manualSubmitted}
+                      />
+                      <Button
+                        size="sm"
+                        className="w-full"
+                        disabled={!paymentId || manualRef.length < 8 || claimManual.isPending || manualSubmitted}
+                        onClick={() => {
+                          if (!paymentId) return;
+                          claimManual.mutate(
+                            { paymentId, reference: manualRef },
+                            {
+                              onSuccess: () => {
+                                setManualSubmitted(true);
+                                setPendingVerification(true);
+                                toast.success("Reference submitted — admin will verify shortly.");
+                                setOrderPlaced(true);
+                                setPaymentOpen(false);
+                                // Keep paymentId so usePaymentStatus keeps
+                                // polling — when admin approves/rejects we
+                                // flip the UI automatically.
+                                setPaymentTimedOut(false);
+                                clearCart();
+                                setIsCheckingOut(false);
+                              },
+                              onError: (e) => toast.error(e.message ?? "Failed to submit reference"),
+                            },
+                          );
+                        }}
+                      >
+                        {claimManual.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
+                        Submit reference for verification
+                      </Button>
+                      <p className="text-[11px] text-foreground/50">
+                        The code looks like <span className="font-mono">QGH7X8Y9ZA</span> — find it in the M-Pesa SMS that confirmed your payment.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-2 pt-1">
                       <Button variant="outline" onClick={() => { setPaymentTimedOut(false); refetchPayment(); }} className="flex-1">
                         Check status
                       </Button>
-                      <Button onClick={handleRetryPayment} className="flex-1">
-                        <Smartphone className="w-4 h-4 mr-2" /> Retry
+                      <Button variant="outline" onClick={handleRetryPayment} className="flex-1">
+                        <Smartphone className="w-4 h-4 mr-2" /> Retry STK push
                       </Button>
                     </div>
                   </div>

@@ -3,6 +3,64 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
 /**
+ * Manual M-Pesa claim — fallback when the Daraja callback never reaches us.
+ * Customer types the receipt code (e.g. "QGH7X8Y9ZA") from their phone; the
+ * payment row is flagged as `manual_claim_status='claimed'` and an admin
+ * cross-checks the M-Pesa Business portal before approving.
+ */
+export function useClaimManualPayment() {
+  return useMutation<
+    { ok: true; already?: boolean },
+    Error,
+    { paymentId: string; reference: string }
+  >({
+    mutationFn: async ({ paymentId, reference }) => {
+      const { data, error } = await (supabase as any).rpc("claim_payment_manually", {
+        p_payment_id: paymentId,
+        p_reference: reference,
+      });
+      if (error) throw new Error(error.message ?? "Failed to submit reference");
+      return (data ?? { ok: true }) as { ok: true; already?: boolean };
+    },
+  });
+}
+
+/** Admin-only: approve or reject a manual M-Pesa claim. */
+export function useVerifyManualPayment() {
+  const qc = useQueryClient();
+  return useMutation<
+    { ok: true; approved: boolean; order_id: string | null; reservation_id: string | null },
+    Error,
+    { paymentId: string; approve: boolean; notes?: string }
+  >({
+    mutationFn: async ({ paymentId, approve, notes }) => {
+      const { data, error } = await (supabase as any).rpc("verify_manual_payment", {
+        p_payment_id: paymentId,
+        p_approve: approve,
+        p_notes: notes ?? null,
+      });
+      if (error) throw new Error(error.message ?? "Verification failed");
+      return data as { ok: true; approved: boolean; order_id: string | null; reservation_id: string | null };
+    },
+    onSuccess: async (data) => {
+      qc.invalidateQueries({ queryKey: ["orderPayments"] });
+      qc.invalidateQueries({ queryKey: ["orders"] });
+      qc.invalidateQueries({ queryKey: ["payments"] });
+      qc.invalidateQueries({ queryKey: ["manualClaims"] });
+      // Mirror mpesa-callback: fire receipt notifications when an order is approved.
+      if (data.approved && data.order_id) {
+        const invoke = (fn: string) =>
+          supabase.functions
+            .invoke(fn, { body: { template: "order_payment_receipt", recordId: data.order_id } })
+            .catch(() => {});
+        void invoke("send-email");
+        void invoke("send-sms");
+      }
+    },
+  });
+}
+
+/**
  * Initiate input — pass exactly one of `orderId` or `reservationId`.
  *  - `orderId`        → pays a placed food order in full
  *  - `reservationId`  → pays the deposit configured on a reservation lead
@@ -56,11 +114,17 @@ export type PaymentStatus =
   | "cancelled"
   | "timeout";
 
+export type ManualClaimStatus = "none" | "claimed" | "verified" | "rejected";
+
 export interface PaymentRow {
   id: string;
   status: PaymentStatus;
   result_desc: string | null;
   mpesa_receipt_number: string | null;
+  manual_claim_status?: ManualClaimStatus;
+  manual_reference?: string | null;
+  manual_notes?: string | null;
+  manual_verified_at?: string | null;
 }
 
 /**
@@ -74,24 +138,27 @@ export function usePaymentStatus(paymentId: string | null, intervalMs = 3000) {
     enabled: !!paymentId,
     refetchInterval: (q) => {
       const d = q.state.data as PaymentRow | null | undefined;
-      return d && d.status !== "pending" ? false : intervalMs;
+      // Keep polling while waiting for either the M-Pesa callback OR an admin
+      // decision on a manual claim.
+      if (!d) return intervalMs;
+      if (d.status === "pending") return intervalMs;
+      if (d.manual_claim_status === "claimed") return intervalMs;
+      return false;
     },
     queryFn: async () => {
       if (!paymentId) return null;
-      // Read through the `payments_public` view (sql/0018) which exposes only
-      // the non-sensitive columns and is readable by anon. Falls back to the
-      // base table if the view doesn't exist yet (column GRANT also allows
-      // anon to read these specific columns).
+      const cols =
+        "id, status, result_desc, mpesa_receipt_number, manual_claim_status, manual_reference, manual_notes, manual_verified_at";
       const sb = supabase as any;
       let { data, error } = await sb
         .from("payments_public")
-        .select("id, status, result_desc, mpesa_receipt_number")
+        .select(cols)
         .eq("id", paymentId)
         .maybeSingle();
       if (error) {
         const fallback = await sb
           .from("payments")
-          .select("id, status, result_desc, mpesa_receipt_number")
+          .select(cols)
           .eq("id", paymentId)
           .maybeSingle();
         if (fallback.error) throw fallback.error;
@@ -101,9 +168,8 @@ export function usePaymentStatus(paymentId: string | null, intervalMs = 3000) {
     },
   });
 
-  // Realtime: instantly reflect the M-Pesa callback the moment it lands,
-  // instead of waiting up to `intervalMs` for the next poll. Polling stays
-  // as a fallback in case the realtime channel drops.
+  // Realtime: instantly reflect the M-Pesa callback OR admin verification the
+  // moment it lands. Polling stays as a fallback in case realtime drops.
   useEffect(() => {
     if (!paymentId) return;
     const channel = (supabase as any)
@@ -127,6 +193,10 @@ export function usePaymentStatus(paymentId: string | null, intervalMs = 3000) {
             status: row.status,
             result_desc: row.result_desc ?? null,
             mpesa_receipt_number: row.mpesa_receipt_number ?? null,
+            manual_claim_status: row.manual_claim_status ?? "none",
+            manual_reference: row.manual_reference ?? null,
+            manual_notes: row.manual_notes ?? null,
+            manual_verified_at: row.manual_verified_at ?? null,
           } satisfies PaymentRow);
         },
       )

@@ -813,7 +813,13 @@ export interface OrderPayment {
   refund_result_desc: string | null;
   refunded_at: string | null;
   created_at: string;
+  manual_claim_status: "none" | "claimed" | "verified" | "rejected";
+  manual_reference: string | null;
+  manual_claimed_at: string | null;
 }
+
+const ORDER_PAYMENT_COLUMNS =
+  "id, order_id, reservation_id, amount, status, mpesa_receipt_number, refund_status, refund_amount, refund_reason, refund_result_desc, refunded_at, created_at, manual_claim_status, manual_reference, manual_claimed_at";
 
 export function useOrderPayments(orderId: string | null | undefined) {
   return useQuery<OrderPayment[]>({
@@ -822,14 +828,29 @@ export function useOrderPayments(orderId: string | null | undefined) {
     queryFn: async () => {
       const { data, error } = await (supabase as any)
         .from("payments")
-        .select(
-          "id, order_id, reservation_id, amount, status, mpesa_receipt_number, refund_status, refund_amount, refund_reason, refund_result_desc, refunded_at, created_at",
-        )
+        .select(ORDER_PAYMENT_COLUMNS)
         .eq("order_id", orderId)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as OrderPayment[];
     },
+  });
+}
+
+/** Admin: payments awaiting manual M-Pesa verification (polled every 15s). */
+export function usePendingManualClaims() {
+  return useQuery<any[]>({
+    queryKey: ["manualClaims", "pending"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("payments")
+        .select(`${ORDER_PAYMENT_COLUMNS}, orders:order_id (order_number, customer_name, customer_phone)`)
+        .eq("manual_claim_status", "claimed")
+        .order("manual_claimed_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as any[];
+    },
+    refetchInterval: 15_000,
   });
 }
 

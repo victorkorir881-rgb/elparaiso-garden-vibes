@@ -4,16 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
-import { Download } from "lucide-react";
+
 import { toast } from "sonner";
 import { useAuth, supabase } from "@/lib/auth";
 import { siteUrl } from "@/lib/site-url";
-
-// chrome / edge / android beforeinstallprompt event shape
-type BIPEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-};
 
 export default function AdminLogin() {
   const navigate = useNavigate();
@@ -23,7 +17,6 @@ export default function AdminLogin() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [installEvt, setInstallEvt] = useState<BIPEvent | null>(null);
   const [registrationOpen, setRegistrationOpen] = useState<boolean | null>(null);
 
   // Public registration is only available until the first super_admin exists.
@@ -41,33 +34,15 @@ export default function AdminLogin() {
     if (registrationOpen === false && mode === "register") setMode("login");
   }, [registrationOpen, mode]);
 
-  // capture install prompt so we can offer "Download as App"
   useEffect(() => {
-    const handler = (e: Event) => {
-      e.preventDefault();
-      setInstallEvt(e as BIPEvent);
-    };
-    window.addEventListener("beforeinstallprompt", handler);
-    // notify if we got bounced here by the idle timeout
     try {
       if (sessionStorage.getItem("idle-logout") === "1") {
         sessionStorage.removeItem("idle-logout");
         toast.info("You were signed out after 5 minutes of inactivity. Please sign in again.");
       }
     } catch { /* ignore */ }
-    return () => window.removeEventListener("beforeinstallprompt", handler);
   }, []);
 
-  const handleInstall = async () => {
-    if (!installEvt) {
-      toast.info("Use your browser menu → 'Install App' / 'Add to Home Screen' to install.");
-      return;
-    }
-    await installEvt.prompt();
-    const { outcome } = await installEvt.userChoice;
-    if (outcome === "accepted") toast.success("Admin app installed!");
-    setInstallEvt(null);
-  };
 
   if (!loading && isAuthenticated && ["super_admin", "admin", "manager", "staff"].includes(user?.role ?? "")) {
     navigate({ to: "/admin" });
@@ -209,15 +184,7 @@ export default function AdminLogin() {
           </div>
         </div>
 
-        <Button
-          type="button"
-          variant="outline"
-          className="w-full mt-4 border-border text-foreground"
-          onClick={handleInstall}
-        >
-          <Download className="w-4 h-4 mr-2" />
-          {installEvt ? "Install Admin App" : "Add to Home Screen"}
-        </Button>
+
 
         <p className="text-xs text-muted-foreground text-center mt-4">
           {registrationOpen

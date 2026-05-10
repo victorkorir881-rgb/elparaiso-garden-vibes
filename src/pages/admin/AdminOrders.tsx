@@ -6,7 +6,9 @@ import {
   useDeleteOrder,
   useOrderPayments,
   useRefundPayment,
+  usePendingManualClaims,
 } from "@/lib/supabase-hooks";
+import { useVerifyManualPayment } from "@/lib/payments";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -14,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Trash2, Edit2, Eye, Download, Undo2 } from "lucide-react";
+import { Loader2, Trash2, Edit2, Eye, Download, Undo2, ShieldCheck, ShieldX, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { downloadCsv } from "@/lib/csv-export";
 
@@ -52,6 +54,22 @@ export default function AdminOrders() {
   const deleteOrder = useDeleteOrder();
   const { data: orderPayments = [] } = useOrderPayments(selectedOrder?.id);
   const refundPayment = useRefundPayment();
+  const { data: pendingClaims = [] } = usePendingManualClaims();
+  const verifyManual = useVerifyManualPayment();
+  const [verifyNotes, setVerifyNotes] = useState<Record<string, string>>({});
+
+  const handleVerifyManual = (paymentId: string, approve: boolean) => {
+    verifyManual.mutate(
+      { paymentId, approve, notes: verifyNotes[paymentId] || undefined },
+      {
+        onSuccess: (d) => {
+          toast.success(d.approved ? "Payment verified — customer notified." : "Claim rejected.");
+          setVerifyNotes((s) => { const { [paymentId]: _, ...rest } = s; return rest; });
+        },
+        onError: (e) => toast.error(e.message ?? "Verification failed"),
+      },
+    );
+  };
 
   const handleRefund = () => {
     if (!refundTarget) return;
@@ -133,6 +151,38 @@ export default function AdminOrders() {
           <Download className="w-4 h-4 mr-2" /> Export CSV
         </Button>
       </div>
+
+      {pendingClaims.length > 0 && (
+        <Card className="p-4 border-amber-500/40 bg-amber-500/5">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-amber-200">
+                {pendingClaims.length} M-Pesa payment{pendingClaims.length === 1 ? "" : "s"} awaiting manual verification
+              </p>
+              <p className="text-xs text-foreground/70 mt-0.5">
+                The customer typed an M-Pesa reference because the auto-callback didn't reach us. Cross-check on the M-Pesa Business portal, then approve or reject inside the order.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {pendingClaims.slice(0, 6).map((c: any) => {
+                  const o = orders.find((x: any) => x.id === c.order_id);
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => o && openOrderDetails(o)}
+                      className="text-xs font-mono px-2 py-1 rounded border border-amber-500/40 bg-background/40 hover:bg-amber-500/10"
+                      disabled={!o}
+                    >
+                      {c.orders?.order_number ?? "#"} · {c.manual_reference}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -284,41 +334,93 @@ export default function AdminOrders() {
                             ) : (
                               <div className="space-y-2">
                                 {orderPayments.map((p) => (
-                                  <div key={p.id} className="flex items-center justify-between gap-3 bg-muted p-3 rounded-lg text-sm">
-                                    <div className="min-w-0">
-                                      <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="font-mono text-xs">{p.mpesa_receipt_number ?? "—"}</span>
-                                        <Badge variant="outline" className="capitalize">{p.status}</Badge>
-                                        {p.refund_status !== "none" && (
-                                          <Badge
-                                            className={
-                                              p.refund_status === "refunded"
-                                                ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
-                                                : p.refund_status === "pending"
-                                                ? "bg-yellow-500/15 text-yellow-300 border border-yellow-500/30"
-                                                : "bg-red-500/15 text-red-300 border border-red-500/30"
-                                            }
-                                          >
-                                            Refund: {p.refund_status}
-                                          </Badge>
-                                        )}
+                                  <div key={p.id} className="bg-muted p-3 rounded-lg text-sm space-y-3">
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                          <span className="font-mono text-xs">{p.mpesa_receipt_number ?? p.manual_reference ?? "—"}</span>
+                                          <Badge variant="outline" className="capitalize">{p.status}</Badge>
+                                          {p.manual_claim_status === "claimed" && (
+                                            <Badge className="bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                                              Manual claim — awaiting verification
+                                            </Badge>
+                                          )}
+                                          {p.manual_claim_status === "verified" && (
+                                            <Badge className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                                              Manually verified
+                                            </Badge>
+                                          )}
+                                          {p.manual_claim_status === "rejected" && (
+                                            <Badge className="bg-red-500/15 text-red-300 border border-red-500/30">
+                                              Claim rejected
+                                            </Badge>
+                                          )}
+                                          {p.refund_status !== "none" && (
+                                            <Badge
+                                              className={
+                                                p.refund_status === "refunded"
+                                                  ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                                                  : p.refund_status === "pending"
+                                                  ? "bg-yellow-500/15 text-yellow-300 border border-yellow-500/30"
+                                                  : "bg-red-500/15 text-red-300 border border-red-500/30"
+                                              }
+                                            >
+                                              Refund: {p.refund_status}
+                                            </Badge>
+                                          )}
+                                        </div>
+                                        <p className="text-xs text-foreground/60 mt-1">
+                                          KES {p.amount.toLocaleString()} · {new Date(p.created_at).toLocaleString()}
+                                          {p.refund_result_desc ? ` · ${p.refund_result_desc}` : ""}
+                                        </p>
                                       </div>
-                                      <p className="text-xs text-foreground/60 mt-1">
-                                        KES {p.amount.toLocaleString()} · {new Date(p.created_at).toLocaleString()}
-                                        {p.refund_result_desc ? ` · ${p.refund_result_desc}` : ""}
-                                      </p>
+                                      {p.status === "success" && (p.refund_status === "none" || p.refund_status === "failed") && (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={() => {
+                                            setRefundTarget({ id: p.id, amount: p.amount, receipt: p.mpesa_receipt_number });
+                                            setRefundReason("");
+                                          }}
+                                        >
+                                          <Undo2 className="w-4 h-4 mr-1" /> Refund
+                                        </Button>
+                                      )}
                                     </div>
-                                    {p.status === "success" && (p.refund_status === "none" || p.refund_status === "failed") && (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => {
-                                          setRefundTarget({ id: p.id, amount: p.amount, receipt: p.mpesa_receipt_number });
-                                          setRefundReason("");
-                                        }}
-                                      >
-                                        <Undo2 className="w-4 h-4 mr-1" /> Refund
-                                      </Button>
+
+                                    {p.manual_claim_status === "claimed" && (
+                                      <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 space-y-2">
+                                        <p className="text-xs text-amber-200">
+                                          Customer typed reference{" "}
+                                          <span className="font-mono font-semibold">{p.manual_reference}</span>
+                                          {p.manual_claimed_at ? ` at ${new Date(p.manual_claimed_at).toLocaleString()}` : ""}.
+                                          Confirm against M-Pesa Business portal before approving.
+                                        </p>
+                                        <Input
+                                          placeholder="Internal note (optional)"
+                                          value={verifyNotes[p.id] ?? ""}
+                                          onChange={(e) => setVerifyNotes((s) => ({ ...s, [p.id]: e.target.value }))}
+                                          className="h-8 text-xs"
+                                        />
+                                        <div className="flex gap-2">
+                                          <Button
+                                            size="sm"
+                                            className="flex-1"
+                                            disabled={verifyManual.isPending}
+                                            onClick={() => handleVerifyManual(p.id, true)}
+                                          >
+                                            <ShieldCheck className="w-4 h-4 mr-1" /> Approve & notify customer
+                                          </Button>
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            disabled={verifyManual.isPending}
+                                            onClick={() => handleVerifyManual(p.id, false)}
+                                          >
+                                            <ShieldX className="w-4 h-4 mr-1" /> Reject
+                                          </Button>
+                                        </div>
+                                      </div>
                                     )}
                                   </div>
                                 ))}

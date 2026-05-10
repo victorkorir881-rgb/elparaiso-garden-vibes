@@ -1,4 +1,4 @@
-project_id = "gnlvmszcysogydomahbk"
+project_id = "jzgddynbgpvjkrpuvlxt"
 
 # Daraja does not sign callbacks and Safaricom servers don't send a JWT.
 # We rely on the unguessable CheckoutRequestID + an optional ?token=… shared

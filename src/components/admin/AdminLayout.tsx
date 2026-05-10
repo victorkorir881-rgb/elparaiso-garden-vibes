@@ -12,6 +12,7 @@ import { useAuth } from "@/lib/auth";
 import { useUnreadMessageCount } from "@/lib/supabase-hooks";
 import { toast } from "sonner";
 import NotificationCenter from "./NotificationCenter";
+import AdminInstallButton from "./AdminInstallButton";
 
 const navSections = [
   {
@@ -246,6 +247,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <AdminInstallButton />
             <NotificationCenter />
           </div>
         </header>

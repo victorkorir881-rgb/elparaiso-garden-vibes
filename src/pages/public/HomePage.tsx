@@ -5,10 +5,10 @@ import { Badge } from "@/components/ui/badge";
 import { useSettings, useMenuItems, useReviews, useEvents, useGalleryImages } from "@/lib/supabase-hooks";
 import PublicLayout from "@/components/public/PublicLayout";
 import TestimonialsCarousel from "@/components/TestimonialsCarousel";
+import { MenuItemImage } from "@/components/MenuItemImage";
 import { ScrollReveal } from "@/hooks/useScrollAnimation";
 
 const HERO_BG = "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1600&q=80";
-const FOOD_PLACEHOLDER = "https://images.unsplash.com/photo-1544025162-d76694265947?w=400&q=80";
 
 const features = [
   { icon: Clock, title: "Open 24/7", desc: "We never close. Anytime is the right time." },
@@ -118,7 +118,7 @@ export default function HomePage() {
                 <ScrollReveal key={item.id} animation="fade-up" delay={i * 80}>
                   <div className="bg-card border border-border rounded-xl overflow-hidden card-hover h-full">
                     <div className="relative h-48 overflow-hidden">
-                      <img src={item.image_url ?? FOOD_PLACEHOLDER} alt={item.name} className="w-full h-full object-cover transition-transform duration-500 hover:scale-105" loading="lazy" />
+                      <MenuItemImage src={item.image_url} alt={item.name} className="w-full h-full object-cover transition-transform duration-500 hover:scale-105" loading="lazy" />
                     </div>
                     <div className="p-4">
                       <h3 className="font-semibold text-foreground mb-1">{item.name}</h3>

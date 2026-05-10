@@ -10,14 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { BulkActionBar } from "@/components/admin/BulkActionBar";
 import { ImageUploadField } from "@/components/admin/ImageUploadField";
+import { MenuItemImage } from "@/components/MenuItemImage";
 import { toast } from "sonner";
 import {
   useMenuCategories, useMenuItems,
   useCreateMenuItem, useUpdateMenuItem, useDeleteMenuItem,
   useCreateMenuCategory, useUpdateMenuCategory, useDeleteMenuCategory,
 } from "@/lib/supabase-hooks";
-
-const FOOD_PLACEHOLDER = "https://images.unsplash.com/photo-1544025162-d76694265947?w=200&q=60";
 
 type ItemForm = {
   id?: string; categoryId: string; name: string; description: string; price: string;
@@ -191,7 +190,7 @@ export default function AdminMenu() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <img src={item.image_url ?? FOOD_PLACEHOLDER} alt={item.name} className="w-10 h-10 rounded-lg object-cover" />
+                      <MenuItemImage src={item.image_url} alt={item.name} className="w-10 h-10 rounded-lg object-cover" />
                       <div>
                         <div className="font-medium text-foreground">{item.name}</div>
                       </div>

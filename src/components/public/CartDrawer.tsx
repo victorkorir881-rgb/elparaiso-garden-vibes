@@ -4,8 +4,7 @@ import { Separator } from "@/components/ui/separator";
 import { Minus, Plus, Trash2, ShoppingBag, ArrowRight, X } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { useCart } from "@/contexts/CartContext";
-
-const PLACEHOLDER = "https://images.unsplash.com/photo-1544025162-d76694265947?w=200&q=70";
+import { MenuItemImage } from "@/components/MenuItemImage";
 
 export default function CartDrawer() {
   const { items, isOpen, setOpen, updateQuantity, removeItem, clearCart, total, itemCount } = useCart();
@@ -50,8 +49,8 @@ export default function CartDrawer() {
                 return (
                   <div key={item.id} className="flex gap-3">
                     <div className="w-20 h-20 rounded-lg overflow-hidden bg-muted shrink-0 border border-border">
-                      <img
-                        src={item.imageUrl || PLACEHOLDER}
+                      <MenuItemImage
+                        src={item.imageUrl}
                         alt={item.name}
                         className="w-full h-full object-cover"
                         loading="lazy"

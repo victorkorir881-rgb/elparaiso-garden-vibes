@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useCreateOrder } from "@/lib/supabase-hooks";
+import { useState, useEffect, useRef } from "react";
+import { useCreateOrder, useSettings } from "@/lib/supabase-hooks";
 import { useInitiateMpesaPayment, usePaymentStatus } from "@/lib/payments";
 import { useCart } from "@/contexts/CartContext";
 import { Button } from "@/components/ui/button";
@@ -53,10 +53,13 @@ export default function OrderPage() {
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
+  const [paymentTimedOut, setPaymentTimedOut] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const initiatePayment = useInitiateMpesaPayment();
-  const { data: paymentRow } = usePaymentStatus(paymentId);
+  const { data: paymentRow, refetch: refetchPayment } = usePaymentStatus(paymentId);
   const createOrder = useCreateOrder();
+  const { data: settings } = useSettings();
 
   // Pre-fill from auth when it loads
   useEffect(() => {
@@ -65,12 +68,24 @@ export default function OrderPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth.user]);
 
+  // Stop polling and surface a timeout if the callback hasn't arrived
+  // within the M-Pesa STK push window (~90s safety margin).
+  useEffect(() => {
+    if (!paymentId) return;
+    if (paymentRow && paymentRow.status !== "pending") return;
+    setPaymentTimedOut(false);
+    timeoutRef.current = setTimeout(() => setPaymentTimedOut(true), 120_000);
+    return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current); };
+  }, [paymentId, paymentRow?.status]);
+
   useEffect(() => {
     if (!paymentRow) return;
     if (paymentRow.status === "success") {
       toast.success(`Payment received${paymentRow.mpesa_receipt_number ? ` (${paymentRow.mpesa_receipt_number})` : ""}!`);
       setOrderPlaced(true);
       setPaymentOpen(false);
+      setPaymentId(null);
+      setPaymentTimedOut(false);
       clearCart();
       setIsCheckingOut(false);
     } else if (paymentRow.status === "failed" || paymentRow.status === "cancelled" || paymentRow.status === "timeout") {
@@ -88,7 +103,10 @@ export default function OrderPage() {
   const detailsValid = nameValid && phoneValid && emailValid && addressValid;
 
   const subtotalNum = parseFloat(total) || 0;
-  const deliveryFee = orderType === "delivery" && subtotalNum > 0 ? 200 : 0;
+  // Delivery fee + minimum order are admin-controlled via Business Rules.
+  const adminDeliveryFee = Math.max(0, Number(settings?.deliveryFee ?? 200));
+  const adminMinimumOrder = Math.max(0, Number(settings?.minimumOrderValue ?? 0));
+  const deliveryFee = orderType === "delivery" && subtotalNum > 0 ? adminDeliveryFee : 0;
   const grandTotal = subtotalNum + deliveryFee;
 
   const generateOrderNumber = () => {
@@ -160,7 +178,9 @@ export default function OrderPage() {
 
   const handleRetryPayment = () => {
     if (!pendingOrderId) return;
-    const amountKes = Math.round(grandTotal || (paymentRow as any)?.amount || 0);
+    const amountKes = Math.max(1, Math.round(grandTotal));
+    setPaymentTimedOut(false);
+    setPaymentId(null);
     initiatePayment.mutate(
       { orderId: pendingOrderId, phone: fullPhone, amount: amountKes },
       {
@@ -603,7 +623,12 @@ export default function OrderPage() {
             <Card className="w-full max-w-md p-6 relative" style={{ background: "var(--gradient-surface)", boxShadow: "var(--shadow-elegant)" }}>
               <button
                 type="button"
-                onClick={() => { setPaymentOpen(false); setIsCheckingOut(false); }}
+                onClick={() => {
+                  setPaymentOpen(false);
+                  setPaymentId(null);
+                  setPaymentTimedOut(false);
+                  setIsCheckingOut(false);
+                }}
                 className="absolute top-3 right-3 text-foreground/50 hover:text-foreground p-1"
                 aria-label="Close"
               >
@@ -619,15 +644,45 @@ export default function OrderPage() {
                   Enter your M-Pesa PIN to pay <span className="font-semibold text-primary">KES {grandTotal.toLocaleString()}</span>.
                 </p>
 
-                {(!paymentRow || paymentRow.status === "pending") && (
-                  <div className="flex items-center justify-center gap-2 py-4 text-foreground/70">
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    <span className="text-sm">Waiting for confirmation…</span>
+                {(!paymentRow || paymentRow.status === "pending") && !paymentTimedOut && (
+                  <div className="flex flex-col items-center gap-2 py-4 text-foreground/70">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span className="text-sm">Waiting for confirmation…</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => refetchPayment()}
+                      className="text-xs text-primary hover:underline mt-1"
+                    >
+                      I've paid — check status now
+                    </button>
+                  </div>
+                )}
+
+                {(!paymentRow || paymentRow.status === "pending") && paymentTimedOut && (
+                  <div className="py-4 space-y-3">
+                    <p className="text-amber-400 text-sm">
+                      We didn't receive a confirmation from M-Pesa. If you completed payment, tap "Check status". Otherwise, retry the prompt.
+                    </p>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Button variant="outline" onClick={() => { setPaymentTimedOut(false); refetchPayment(); }} className="flex-1">
+                        Check status
+                      </Button>
+                      <Button onClick={handleRetryPayment} className="flex-1">
+                        <Smartphone className="w-4 h-4 mr-2" /> Retry
+                      </Button>
+                    </div>
                   </div>
                 )}
 
                 {paymentRow?.status === "success" && (
-                  <p className="text-emerald-400 font-medium py-4">Payment received!</p>
+                  <div className="py-4 space-y-1">
+                    <p className="text-emerald-400 font-medium">Payment received!</p>
+                    {paymentRow.mpesa_receipt_number && (
+                      <p className="text-xs text-foreground/60 font-mono">{paymentRow.mpesa_receipt_number}</p>
+                    )}
+                  </div>
                 )}
 
                 {paymentRow && ["failed", "cancelled", "timeout"].includes(paymentRow.status) && (

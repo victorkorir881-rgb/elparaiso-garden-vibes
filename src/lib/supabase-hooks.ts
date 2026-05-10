@@ -337,14 +337,21 @@ export function useCreateReservation() {
         max: 5,
         windowSeconds: 3600,
       });
-      const { data, error } = await supabase.from("reservation_leads").insert(input).select().single();
+      // Generate id client-side so we don't need SELECT permission to read
+      // the inserted row back. Anonymous visitors can INSERT but not SELECT
+      // reservation_leads (admin-only SELECT policy).
+      const id = (typeof crypto !== "undefined" && "randomUUID" in crypto)
+        ? crypto.randomUUID()
+        : undefined;
+      const row = id ? { id, ...input } : input;
+      const { error } = await supabase.from("reservation_leads").insert(row);
       if (error) throw error;
       // Phase 6.1 — fire confirmation email (no-op if customer didn't give email)
-      if (data?.id) {
-        fireTransactionalEmail({ template: "reservation_confirmation", recordId: data.id });
-        fireTransactionalSms({ template: "reservation_confirmation", recordId: data.id });
+      if (id) {
+        fireTransactionalEmail({ template: "reservation_confirmation", recordId: id });
+        fireTransactionalSms({ template: "reservation_confirmation", recordId: id });
       }
-      return data;
+      return { id } as { id: string | undefined };
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["reservations"] }),
   });
@@ -396,10 +403,12 @@ export function useSubmitContact() {
         max: 3,
         windowSeconds: 600,
       });
-      const { data, error } = await supabase.from("contact_messages").insert(input).select().single();
+      // contact_messages.id is a serial (integer) with a sequence default —
+      // do NOT generate it client-side. Insert and let the DB assign it.
+      // Anon visitors can't SELECT the row back (admin-only), so the ack
+      // email is fired by the admin/notification flow instead.
+      const { error } = await supabase.from("contact_messages").insert(input);
       if (error) throw error;
-      // Phase 6.1 — ack email (no-op if customer didn't give email)
-      if (data?.id) fireTransactionalEmail({ template: "contact_ack", recordId: data.id });
     },
   });
 }
@@ -525,11 +534,16 @@ export function useCreateOrder() {
       estimated_time?: number;
       payment_method?: string;
     }) => {
-      const { data, error } = await supabase.from("orders").insert(input).select().single();
+      // Generate id client-side; anon visitors can INSERT but not SELECT orders.
+      const id = (typeof crypto !== "undefined" && "randomUUID" in crypto)
+        ? crypto.randomUUID()
+        : undefined;
+      const row = id ? { id, ...input } : input;
+      const { error } = await supabase.from("orders").insert(row);
       if (error) throw error;
       // Order confirmation email/SMS are sent after a successful M-Pesa payment
       // (see supabase/functions/mpesa-callback/index.ts), not at order creation.
-      return data;
+      return { id, order_number: input.order_number } as { id: string | undefined; order_number: string };
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["orders"] }),
   });

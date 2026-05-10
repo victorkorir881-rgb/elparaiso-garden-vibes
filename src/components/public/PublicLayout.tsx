@@ -79,7 +79,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
               <Link to="/reservations"><Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90">Reserve</Button></Link>
             </div>
 
-            {/* Mobile cart + menu */}
+            {/* Mobile cart + menu (grouped on the right) */}
             <div className="md:hidden flex items-center gap-1">
               <button
                 onClick={openCart}
@@ -96,27 +96,39 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
                   </span>
                 )}
               </button>
+              <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+                <SheetTrigger aria-label="Open navigation menu" className="inline-flex h-9 w-9 items-center justify-center rounded-md text-foreground hover:bg-accent"><Menu className="w-5 h-5" /></SheetTrigger>
+                <SheetContent side="right" className="w-72 bg-card border-border p-0">
+                  <div className="flex flex-col h-full">
+                    <div className="flex items-center justify-between p-6 border-b border-border">
+                      <div className="font-display font-bold text-lg text-foreground">Elparaiso Garden</div>
+                      <Button variant="ghost" size="icon" onClick={() => setMobileOpen(false)}><X className="w-4 h-4" /></Button>
+                    </div>
+                    <nav className="flex flex-col gap-1 p-4 flex-1 overflow-y-auto">
+                      {navLinks.map((link) => (
+                        <Link key={link.to} to={link.to} onClick={() => setMobileOpen(false)} className={`px-4 py-3 rounded-lg text-sm font-medium transition-all ${location === link.to ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}>{link.label}</Link>
+                      ))}
+                      <div className="my-2 h-px bg-border" />
+                      {auth.isAuthenticated ? (
+                        <Link to="/account" onClick={() => setMobileOpen(false)} className="px-4 py-3 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent inline-flex items-center gap-2">
+                          <UserIcon className="w-4 h-4 text-primary" />
+                          {auth.user?.name?.split(" ")[0] || "My account"}
+                        </Link>
+                      ) : (
+                        <Link to="/login" search={{ redirect: undefined } as any} onClick={() => setMobileOpen(false)} className="px-4 py-3 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent inline-flex items-center gap-2">
+                          <LogIn className="w-4 h-4 text-primary" />
+                          Sign in
+                        </Link>
+                      )}
+                    </nav>
+                    <div className="p-4 border-t border-border space-y-3">
+                      <a href={`tel:${phone}`} className="flex items-center gap-2 text-sm text-muted-foreground"><Phone className="w-4 h-4 text-primary" />{phone}</a>
+                      <Link to="/reservations" onClick={() => setMobileOpen(false)}><Button className="w-full bg-primary text-primary-foreground">Reserve a Table</Button></Link>
+                    </div>
+                  </div>
+                </SheetContent>
+              </Sheet>
             </div>
-            <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-              <SheetTrigger aria-label="Open navigation menu" className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-md text-foreground hover:bg-accent"><Menu className="w-5 h-5" /></SheetTrigger>
-              <SheetContent side="right" className="w-72 bg-card border-border p-0">
-                <div className="flex flex-col h-full">
-                  <div className="flex items-center justify-between p-6 border-b border-border">
-                    <div className="font-display font-bold text-lg text-foreground">Elparaiso Garden</div>
-                    <Button variant="ghost" size="icon" onClick={() => setMobileOpen(false)}><X className="w-4 h-4" /></Button>
-                  </div>
-                  <nav className="flex flex-col gap-1 p-4 flex-1">
-                    {navLinks.map((link) => (
-                      <Link key={link.to} to={link.to} onClick={() => setMobileOpen(false)} className={`px-4 py-3 rounded-lg text-sm font-medium transition-all ${location === link.to ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}>{link.label}</Link>
-                    ))}
-                  </nav>
-                  <div className="p-4 border-t border-border space-y-3">
-                    <a href={`tel:${phone}`} className="flex items-center gap-2 text-sm text-muted-foreground"><Phone className="w-4 h-4 text-primary" />{phone}</a>
-                    <Link to="/reservations" onClick={() => setMobileOpen(false)}><Button className="w-full bg-primary text-primary-foreground">Reserve a Table</Button></Link>
-                  </div>
-                </div>
-              </SheetContent>
-            </Sheet>
           </div>
         </div>
       </header>

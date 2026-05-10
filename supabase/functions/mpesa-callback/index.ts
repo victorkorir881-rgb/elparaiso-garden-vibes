@@ -136,7 +136,8 @@ Deno.serve((req) => withTimedLog("mpesa-callback", async () => {
             }).catch((e) => console.warn(`mpesa-callback: ${fn} invoke failed`, e));
           void invoke("send-email");
           void invoke("send-sms");
-          void invoke("send-whatsapp");
+          // WhatsApp notifications are temporarily disabled.
+          // void invoke("send-whatsapp");
         }
       } else if (payment.reservation_id) {
         // ── RESERVATION DEPOSIT ───────────────────────────────────────────

@@ -2,7 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { fireTransactionalEmail } from "@/lib/email";
 import { fireTransactionalSms } from "@/lib/sms";
-import { fireTransactionalWhatsapp } from "@/lib/whatsapp";
+// WhatsApp notifications are temporarily disabled (kept for future re-enable).
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -343,7 +343,6 @@ export function useCreateReservation() {
       if (data?.id) {
         fireTransactionalEmail({ template: "reservation_confirmation", recordId: data.id });
         fireTransactionalSms({ template: "reservation_confirmation", recordId: data.id });
-        fireTransactionalWhatsapp({ template: "reservation_confirmation", recordId: data.id });
       }
       return data;
     },
@@ -528,12 +527,8 @@ export function useCreateOrder() {
     }) => {
       const { data, error } = await supabase.from("orders").insert(input).select().single();
       if (error) throw error;
-      // Phase 6.1 — order confirmation email
-      if (data?.id) {
-        fireTransactionalEmail({ template: "order_confirmation", recordId: data.id });
-        fireTransactionalSms({ template: "order_confirmation", recordId: data.id });
-        fireTransactionalWhatsapp({ template: "order_confirmation", recordId: data.id });
-      }
+      // Order confirmation email/SMS are sent after a successful M-Pesa payment
+      // (see supabase/functions/mpesa-callback/index.ts), not at order creation.
       return data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["orders"] }),
@@ -550,7 +545,6 @@ export function useUpdateOrder() {
       if (data.status && ["confirmed", "preparing", "ready", "completed", "cancelled"].includes(data.status)) {
         fireTransactionalEmail({ template: "order_status_update", recordId: id, status: data.status });
         fireTransactionalSms({ template: "order_status_update", recordId: id, status: data.status });
-        fireTransactionalWhatsapp({ template: "order_status_update", recordId: id, status: data.status });
       }
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["orders"] }),

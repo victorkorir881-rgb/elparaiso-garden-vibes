@@ -207,7 +207,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   );
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="admin-shell min-h-screen bg-background flex">
       <aside
         className="hidden lg:flex w-64 flex-col border-r border-border/60 shrink-0"
         style={{ background: "var(--gradient-surface)" }}

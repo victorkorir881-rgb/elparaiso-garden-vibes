@@ -1,10 +1,12 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "@tanstack/react-router";
-import { Menu, X, Phone, MapPin, ChevronUp, User as UserIcon, LogIn } from "lucide-react";
+import { Menu, X, Phone, MapPin, ChevronUp, User as UserIcon, LogIn, ShoppingBag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useSettings } from "@/lib/supabase-hooks";
 import { useAuth } from "@/lib/auth";
+import { useCart } from "@/contexts/CartContext";
+import CartDrawer from "@/components/public/CartDrawer";
 
 const navLinks = [
   { to: "/", label: "Home" },
@@ -23,6 +25,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
   const [mobileOpen, setMobileOpen] = useState(false);
   const { data: settings } = useSettings();
   const auth = useAuth();
+  const { itemCount, openCart } = useCart();
 
   useEffect(() => {
     const handleScroll = () => { setScrolled(window.scrollY > 20); setShowScrollTop(window.scrollY > 400); };
@@ -51,14 +54,48 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
                 <Link key={link.to} to={link.to} className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 whitespace-nowrap ${location === link.to ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-accent"}`}>{link.label}</Link>
               ))}
             </nav>
-            <div className="hidden md:flex items-center gap-3 flex-shrink-0">
-              <a href={`tel:${phone}`} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary transition-colors"><Phone className="w-4 h-4" /><span>{phone}</span></a>
+            <div className="hidden md:flex items-center gap-2 flex-shrink-0">
+              <a href={`tel:${phone}`} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary transition-colors mr-1"><Phone className="w-4 h-4" /><span>{phone}</span></a>
+              <button
+                onClick={openCart}
+                aria-label={`Cart, ${itemCount} items`}
+                className="relative inline-flex items-center justify-center w-9 h-9 rounded-full text-foreground hover:bg-accent transition-colors"
+              >
+                <ShoppingBag className="w-5 h-5" />
+                {itemCount > 0 && (
+                  <span
+                    className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center text-primary-foreground tabular-nums"
+                    style={{ background: "var(--gradient-gold)" }}
+                  >
+                    {itemCount > 9 ? "9+" : itemCount}
+                  </span>
+                )}
+              </button>
               {auth.isAuthenticated ? (
                 <Link to="/account"><Button size="sm" variant="outline" className="rounded-full"><UserIcon className="w-4 h-4 mr-1.5" />{auth.user?.name?.split(" ")[0] || "Account"}</Button></Link>
               ) : (
                 <Link to="/login" search={{ redirect: undefined } as any}><Button size="sm" variant="outline" className="rounded-full"><LogIn className="w-4 h-4 mr-1.5" />Sign in</Button></Link>
               )}
-              <Link to="/reservations"><Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90">Reserve a Table</Button></Link>
+              <Link to="/reservations"><Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90">Reserve</Button></Link>
+            </div>
+
+            {/* Mobile cart + menu */}
+            <div className="md:hidden flex items-center gap-1">
+              <button
+                onClick={openCart}
+                aria-label={`Cart, ${itemCount} items`}
+                className="relative inline-flex items-center justify-center w-9 h-9 rounded-md text-foreground hover:bg-accent transition-colors"
+              >
+                <ShoppingBag className="w-5 h-5" />
+                {itemCount > 0 && (
+                  <span
+                    className="absolute top-0.5 right-0.5 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-bold flex items-center justify-center text-primary-foreground tabular-nums"
+                    style={{ background: "var(--gradient-gold)" }}
+                  >
+                    {itemCount > 9 ? "9+" : itemCount}
+                  </span>
+                )}
+              </button>
             </div>
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <SheetTrigger aria-label="Open navigation menu" className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-md text-foreground hover:bg-accent"><Menu className="w-5 h-5" /></SheetTrigger>
@@ -84,6 +121,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
         </div>
       </header>
       <main id="main-content" tabIndex={-1} className="flex-1 pt-16 md:pt-20 focus:outline-none">{children}</main>
+      <CartDrawer />
       <footer className="bg-card border-t border-border mt-auto">
         <div className="container py-12">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">

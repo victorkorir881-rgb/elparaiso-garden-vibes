@@ -1,8 +1,32 @@
 // supabase/functions/send-sms/index.ts
 // Phase 6.2 — Transactional SMS sender for Elparaiso Garden Kisii.
 //
-// Provider: Africa's Talking (https://africastalking.com)
-// Triggers: Reservation, Order placed, Order status change, Payment receipt.
+// Provider: Africa's Talking (https://africastalking.com) — Kenya-first, M-Pesa
+// adjacent, supports alphanumeric or short-code sender IDs.
+//
+// Triggers:
+//   - Reservation booked → confirmation SMS
+//   - Order placed       → confirmation SMS with order number + total
+//   - Order status change → status update SMS
+//
+// Auth model:
+//   This function is callable by anonymous browser visitors (public forms),
+//   so verify_jwt is false. To prevent abuse:
+//     1. Only a fixed set of `template` names are allowed.
+//     2. The recipient phone is taken from the row in the database (looked
+//        up by record id), NOT trusted from the request body. This stops
+//        attackers from blasting SMS to arbitrary numbers through us.
+//     3. Per-record idempotency: we record sent SMS in `sms_send_log`
+//        and refuse duplicates within 5 minutes for the same key.
+//
+// Required Supabase secrets:
+//   AT_API_KEY        — Africa's Talking API key (Sandbox or Live)
+//   AT_USERNAME       — Africa's Talking username ("sandbox" for the sandbox)
+//
+// Optional secret:
+//   AT_SENDER_ID      — alphanumeric sender ID or short code, e.g. "ELPARAISO"
+//                       (omit on sandbox; required for production billing)
+//   AT_ENV            — "sandbox" (default) | "production"
 
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
@@ -69,12 +93,6 @@ function renderOrderPaymentReceipt(o: any, p: any): string {
   const rcpt = p?.mpesa_receipt_number ? ` Receipt: ${p.mpesa_receipt_number}.` : "";
   return `Asante ${o.customer_name ?? ""}! Payment${amtStr} for order ${o.order_number} received.${rcpt} Order is now confirmed. — Elparaiso Garden Kisii`.trim();
 }
-
-/** 
- * Checks the log to prevent spamming the same SMS multiple times 
- * for the same record within 5 minutes.
- */
-async function recentlySent(
   admin: ReturnType<typeof createClient>,
   key: string,
 ): Promise<boolean> {
@@ -89,136 +107,130 @@ async function recentlySent(
 
 async function logSend(
   admin: ReturnType<typeof createClient>,
-  row: { 
-    idempotency_key: string; 
-    template: string; 
-    record_id: string; 
-    phone: string; 
-    status: "sent" | "failed"; 
-    provider_response?: any; 
-    error?: string 
-  },
+  row: { idempotency_key: string; template: string; record_id: string; phone: string; status: "sent" | "failed"; provider_response?: any; error?: string },
 ) {
   await admin.from("sms_send_log").insert(row).then(() => {}, () => {});
 }
 
-Deno.serve(async (req) => {
-  return await withTimedLog("send-sms", async () => {
-    if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
-    if (req.method !== "POST") {
-      return new Response(JSON.stringify({ error: "method_not_allowed" }), { status: 405, headers: { ...corsHeaders, "content-type": "application/json" } });
-    }
+Deno.serve((req) => withTimedLog("send-sms", async () => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "method_not_allowed" }), { status: 405, headers: { ...corsHeaders, "content-type": "application/json" } });
+  }
 
-    let body: RequestBody;
-    try {
-      body = await req.json();
-    } catch {
-      return new Response(JSON.stringify({ error: "invalid_json" }), { status: 400, headers: { ...corsHeaders, "content-type": "application/json" } });
-    }
+  let body: RequestBody;
+  try {
+    body = await req.json();
+  } catch {
+    return new Response(JSON.stringify({ error: "invalid_json" }), { status: 400, headers: { ...corsHeaders, "content-type": "application/json" } });
+  }
 
-    const ALLOWED: TemplateName[] = ["reservation_confirmation", "order_confirmation", "order_status_update", "order_payment_receipt"];
-    if (!body?.template || !ALLOWED.includes(body.template) || !body?.recordId) {
-      return new Response(JSON.stringify({ error: "bad_request" }), { status: 400, headers: { ...corsHeaders, "content-type": "application/json" } });
-    }
+  const ALLOWED: TemplateName[] = ["reservation_confirmation", "order_confirmation", "order_status_update", "order_payment_receipt"];
+  if (!body?.template || !ALLOWED.includes(body.template) || !body?.recordId) {
+    return new Response(JSON.stringify({ error: "bad_request" }), { status: 400, headers: { ...corsHeaders, "content-type": "application/json" } });
+  }
 
-    const AT_API_KEY = Deno.env.get("AT_API_KEY");
-    const AT_USERNAME = Deno.env.get("AT_USERNAME");
-    const AT_SENDER_ID = Deno.env.get("AT_SENDER_ID") ?? "";
-    const AT_ENV = (Deno.env.get("AT_ENV") ?? "sandbox").toLowerCase();
-    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-    const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const AT_API_KEY = Deno.env.get("AT_API_KEY");
+  const AT_USERNAME = Deno.env.get("AT_USERNAME");
+  const AT_SENDER_ID = Deno.env.get("AT_SENDER_ID") ?? "";
+  const AT_ENV = (Deno.env.get("AT_ENV") ?? "sandbox").toLowerCase();
+  const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+  const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    if (!AT_API_KEY || !AT_USERNAME) {
-      return new Response(JSON.stringify({ error: "sms_not_configured" }), { status: 503, headers: { ...corsHeaders, "content-type": "application/json" } });
-    }
+  if (!AT_API_KEY || !AT_USERNAME) {
+    return new Response(JSON.stringify({ error: "sms_not_configured" }), { status: 503, headers: { ...corsHeaders, "content-type": "application/json" } });
+  }
 
-    const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
+  const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } });
 
-    // 1. Look up the record + recipient phone server-side.
-    let phone: string | null = null;
-    let message = "";
+  // 1. Look up the record + recipient phone server-side.
+  let phone: string | null = null;
+  let message = "";
 
-    if (body.template === "reservation_confirmation") {
-      const { data, error } = await admin.from("reservation_leads").select("*").eq("id", body.recordId).single();
-      if (error || !data) return new Response(JSON.stringify({ error: "record_not_found" }), { status: 404, headers: { ...corsHeaders, "content-type": "application/json" } });
-      phone = normalizeKePhone(data.phone);
-      message = renderReservation(data);
-    } else if (body.template === "order_confirmation") {
-      const { data, error } = await admin.from("orders").select("*").eq("id", body.recordId).single();
-      if (error || !data) return new Response(JSON.stringify({ error: "record_not_found" }), { status: 404, headers: { ...corsHeaders, "content-type": "application/json" } });
-      phone = normalizeKePhone(data.customer_phone);
-      message = renderOrderConfirmation(data);
-    } else if (body.template === "order_status_update") {
-      if (!body.status) return new Response(JSON.stringify({ error: "status_required" }), { status: 400, headers: { ...corsHeaders, "content-type": "application/json" } });
-      const { data, error } = await admin.from("orders").select("*").eq("id", body.recordId).single();
-      if (error || !data) return new Response(JSON.stringify({ error: "record_not_found" }), { status: 404, headers: { ...corsHeaders, "content-type": "application/json" } });
-      phone = normalizeKePhone(data.customer_phone);
-      message = renderOrderStatus(data, body.status);
-    } else if (body.template === "order_payment_receipt") {
-      const { data, error } = await admin.from("orders").select("*").eq("id", body.recordId).single();
-      if (error || !data) return new Response(JSON.stringify({ error: "record_not_found" }), { status: 404, headers: { ...corsHeaders, "content-type": "application/json" } });
-      const { data: pay } = await admin
-        .from("payments")
-        .select("amount, mpesa_receipt_number, phone, status, completed_at")
-        .eq("order_id", body.recordId)
-        .eq("status", "success")
-        .order("completed_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      phone = normalizeKePhone(pay?.phone ?? data.customer_phone);
-      message = renderOrderPaymentReceipt(data, pay);
-    }
+  if (body.template === "reservation_confirmation") {
+    const { data, error } = await admin.from("reservation_leads").select("*").eq("id", body.recordId).single();
+    if (error || !data) return new Response(JSON.stringify({ error: "record_not_found" }), { status: 404, headers: { ...corsHeaders, "content-type": "application/json" } });
+    phone = normalizeKePhone(data.phone);
+    message = renderReservation(data);
+  } else if (body.template === "order_confirmation") {
+    const { data, error } = await admin.from("orders").select("*").eq("id", body.recordId).single();
+    if (error || !data) return new Response(JSON.stringify({ error: "record_not_found" }), { status: 404, headers: { ...corsHeaders, "content-type": "application/json" } });
+    phone = normalizeKePhone(data.customer_phone);
+    message = renderOrderConfirmation(data);
+  } else if (body.template === "order_status_update") {
+    if (!body.status) return new Response(JSON.stringify({ error: "status_required" }), { status: 400, headers: { ...corsHeaders, "content-type": "application/json" } });
+    const { data, error } = await admin.from("orders").select("*").eq("id", body.recordId).single();
+    if (error || !data) return new Response(JSON.stringify({ error: "record_not_found" }), { status: 404, headers: { ...corsHeaders, "content-type": "application/json" } });
+    phone = normalizeKePhone(data.customer_phone);
+    message = renderOrderStatus(data, body.status);
+  } else if (body.template === "order_payment_receipt") {
+    const { data, error } = await admin.from("orders").select("*").eq("id", body.recordId).single();
+    if (error || !data) return new Response(JSON.stringify({ error: "record_not_found" }), { status: 404, headers: { ...corsHeaders, "content-type": "application/json" } });
+    const { data: pay } = await admin
+      .from("payments")
+      .select("amount, mpesa_receipt_number, phone, status, completed_at")
+      .eq("order_id", body.recordId)
+      .eq("status", "success")
+      .order("completed_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    phone = normalizeKePhone(pay?.phone ?? data.customer_phone);
+    message = renderOrderPaymentReceipt(data, pay);
+  }
 
-    if (!phone) {
-      return new Response(JSON.stringify({ skipped: "no_phone" }), { status: 200, headers: { ...corsHeaders, "content-type": "application/json" } });
-    }
+  if (!phone) {
+    // Customer didn't provide a usable phone — succeed silently so callers
+    // can fire-and-forget without conditional checks.
+    return new Response(JSON.stringify({ skipped: "no_phone" }), { status: 200, headers: { ...corsHeaders, "content-type": "application/json" } });
+  }
 
-    const idempotencyKey = `${body.template}:${body.recordId}:${body.status ?? ""}`;
-    if (await recentlySent(admin, idempotencyKey)) {
-      return new Response(JSON.stringify({ skipped: "duplicate" }), { status: 200, headers: { ...corsHeaders, "content-type": "application/json" } });
-    }
+  const idempotencyKey = `${body.template}:${body.recordId}:${body.status ?? ""}`;
+  if (await recentlySent(admin, idempotencyKey)) {
+    return new Response(JSON.stringify({ skipped: "duplicate" }), { status: 200, headers: { ...corsHeaders, "content-type": "application/json" } });
+  }
 
-    // 2. POST to Africa's Talking.
-    const endpoint = AT_ENV === "production" ? LIVE_ENDPOINT : SANDBOX_ENDPOINT;
-    const form = new URLSearchParams();
-    form.set("username", AT_USERNAME);
-    form.set("to", phone);
-    form.set("message", message);
-    if (AT_SENDER_ID) form.set("from", AT_SENDER_ID);
+  // 2. POST to Africa's Talking.
+  const endpoint = AT_ENV === "production" ? LIVE_ENDPOINT : SANDBOX_ENDPOINT;
+  const form = new URLSearchParams();
+  form.set("username", AT_USERNAME);
+  form.set("to", phone);
+  form.set("message", message);
+  if (AT_SENDER_ID) form.set("from", AT_SENDER_ID);
 
-    let providerJson: any = null;
-    let providerOk = false;
-    try {
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "apiKey": AT_API_KEY,
-          "Content-Type": "application/x-www-form-urlencoded",
-          "Accept": "application/json",
-        },
-        body: form.toString(),
-      });
-      providerJson = await res.json().catch(() => ({}));
-      const recipients = providerJson?.SMSMessageData?.Recipients ?? [];
-      providerOk = res.ok && recipients.some((r: any) => r?.status === "Success");
-    } catch (e) {
-      await logSend(admin, { idempotency_key: idempotencyKey, template: body.template, record_id: body.recordId, phone, status: "failed", error: (e as Error).message });
-      return new Response(JSON.stringify({ error: "provider_unreachable" }), { status: 502, headers: { ...corsHeaders, "content-type": "application/json" } });
-    }
-
-    await logSend(admin, {
-      idempotency_key: idempotencyKey,
-      template: body.template,
-      record_id: body.recordId,
-      phone,
-      status: providerOk ? "sent" : "failed",
-      provider_response: providerJson,
+  let providerJson: any = null;
+  let providerOk = false;
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "apiKey": AT_API_KEY,
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json",
+      },
+      body: form.toString(),
     });
+    providerJson = await res.json().catch(() => ({}));
+    // Africa's Talking returns 201 on success; per-recipient status is in
+    // SMSMessageData.Recipients[].status === "Success"
+    const recipients = providerJson?.SMSMessageData?.Recipients ?? [];
+    providerOk = res.ok && recipients.some((r: any) => r?.status === "Success");
+  } catch (e) {
+    await logSend(admin, { idempotency_key: idempotencyKey, template: body.template, record_id: body.recordId, phone, status: "failed", error: (e as Error).message });
+    return new Response(JSON.stringify({ error: "provider_unreachable" }), { status: 502, headers: { ...corsHeaders, "content-type": "application/json" } });
+  }
 
-    if (!providerOk) {
-      return new Response(JSON.stringify({ error: "provider_error", details: providerJson }), { status: 502, headers: { ...corsHeaders, "content-type": "application/json" } });
-    }
+  await logSend(admin, {
+    idempotency_key: idempotencyKey,
+    template: body.template,
+    record_id: body.recordId,
+    phone,
+    status: providerOk ? "sent" : "failed",
+    provider_response: providerJson,
+  });
 
-    return new Response(JSON.stringify({ ok: true, to: phone }), { status: 200, headers: { ...corsHeaders, "content-type": "application/json" } });
-  }, { request_id: req.headers.get("x-request-id") ?? undefined });
-});
+  if (!providerOk) {
+    return new Response(JSON.stringify({ error: "provider_error", details: providerJson }), { status: 502, headers: { ...corsHeaders, "content-type": "application/json" } });
+  }
+
+  return new Response(JSON.stringify({ ok: true, to: phone }), { status: 200, headers: { ...corsHeaders, "content-type": "application/json" } });
+}, { request_id: req.headers.get("x-request-id") ?? undefined }));

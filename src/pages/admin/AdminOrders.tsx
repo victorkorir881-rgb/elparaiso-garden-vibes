@@ -22,13 +22,13 @@ const statusOptions = ["pending", "confirmed", "preparing", "ready", "out-for-de
 const orderTypeOptions = ["dine-in", "takeaway", "delivery"];
 
 const statusColors: Record<string, string> = {
-  pending: "bg-yellow-100 text-yellow-800",
-  confirmed: "bg-blue-100 text-blue-800",
-  preparing: "bg-purple-100 text-purple-800",
-  ready: "bg-green-100 text-green-800",
-  "out-for-delivery": "bg-indigo-100 text-indigo-800",
-  completed: "bg-emerald-100 text-emerald-800",
-  cancelled: "bg-red-100 text-red-800",
+  pending: "bg-yellow-500/15 text-yellow-300 border border-yellow-500/30",
+  confirmed: "bg-blue-500/15 text-blue-300 border border-blue-500/30",
+  preparing: "bg-purple-500/15 text-purple-300 border border-purple-500/30",
+  ready: "bg-green-500/15 text-green-300 border border-green-500/30",
+  "out-for-delivery": "bg-indigo-500/15 text-indigo-300 border border-indigo-500/30",
+  completed: "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30",
+  cancelled: "bg-red-500/15 text-red-300 border border-red-500/30",
 };
 
 export default function AdminOrders() {
@@ -142,15 +142,15 @@ export default function AdminOrders() {
           </Card>
           <Card className="p-4">
             <p className="text-sm text-foreground/60 mb-1">Pending</p>
-            <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
+            <p className="text-2xl font-bold text-yellow-300">{stats.pending}</p>
           </Card>
           <Card className="p-4">
             <p className="text-sm text-foreground/60 mb-1">Preparing</p>
-            <p className="text-2xl font-bold text-purple-600">{stats.preparing}</p>
+            <p className="text-2xl font-bold text-purple-300">{stats.preparing}</p>
           </Card>
           <Card className="p-4">
             <p className="text-sm text-foreground/60 mb-1">Out for Delivery</p>
-            <p className="text-2xl font-bold text-indigo-600">{stats.outForDelivery}</p>
+            <p className="text-2xl font-bold text-indigo-300">{stats.outForDelivery}</p>
           </Card>
         </div>
       )}
@@ -293,10 +293,10 @@ export default function AdminOrders() {
                                           <Badge
                                             className={
                                               p.refund_status === "refunded"
-                                                ? "bg-emerald-100 text-emerald-800"
+                                                ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
                                                 : p.refund_status === "pending"
-                                                ? "bg-yellow-100 text-yellow-800"
-                                                : "bg-red-100 text-red-800"
+                                                ? "bg-yellow-500/15 text-yellow-300 border border-yellow-500/30"
+                                                : "bg-red-500/15 text-red-300 border border-red-500/30"
                                             }
                                           >
                                             Refund: {p.refund_status}

@@ -269,3 +269,59 @@ img, video { max-width: 100%; height: auto; }
     }
   }
 }
+/* ============================================================
+   Admin Shell — premium SaaS theme (scoped to .admin-shell)
+   Distinct from the customer site: cool slate + refined sapphire,
+   tighter typography, sans-serif headings, sharper edges.
+   ============================================================ */
+.admin-shell {
+  --background: oklch(15% 0.012 255);
+  --foreground: oklch(96% 0.005 250);
+  --card: oklch(19% 0.015 255);
+  --card-foreground: oklch(96% 0.005 250);
+  --popover: oklch(20% 0.016 255);
+  --popover-foreground: oklch(96% 0.005 250);
+  --primary: oklch(72% 0.13 235);
+  --primary-foreground: oklch(15% 0.012 255);
+  --secondary: oklch(23% 0.018 255);
+  --secondary-foreground: oklch(94% 0.005 250);
+  --muted: oklch(22% 0.014 255);
+  --muted-foreground: oklch(68% 0.012 250);
+  --accent: oklch(26% 0.022 255);
+  --accent-foreground: oklch(96% 0.005 250);
+  --destructive: oklch(58% 0.20 25);
+  --destructive-foreground: oklch(98% 0.005 0);
+  --border: oklch(28% 0.018 255 / 0.6);
+  --input: oklch(22% 0.016 255);
+  --ring: oklch(72% 0.13 235);
+  --sidebar: oklch(13% 0.010 255);
+  --sidebar-foreground: oklch(94% 0.005 250);
+  --sidebar-accent: oklch(20% 0.016 255);
+  --sidebar-border: oklch(26% 0.018 255);
+
+  --gradient-gold: linear-gradient(135deg, oklch(76% 0.13 235), oklch(62% 0.14 245));
+  --gradient-surface: linear-gradient(180deg, oklch(20% 0.016 255), oklch(16% 0.012 255));
+  --shadow-soft: 0 1px 2px oklch(0% 0 0 / 0.3), 0 6px 20px -10px oklch(0% 0 0 / 0.55);
+  --shadow-elegant:
+    0 1px 0 oklch(72% 0.13 235 / 0.06) inset,
+    0 20px 50px -28px oklch(0% 0 0 / 0.75);
+  --shadow-gold: 0 8px 28px -12px oklch(72% 0.13 235 / 0.35);
+}
+
+.admin-shell,
+.admin-shell h1,
+.admin-shell h2,
+.admin-shell h3,
+.admin-shell h4,
+.admin-shell h5,
+.admin-shell h6 {
+  font-family: var(--font-sans);
+  letter-spacing: -0.012em;
+}
+
+.admin-shell h1 { font-weight: 600; }
+.admin-shell h2,
+.admin-shell h3 { font-weight: 600; }
+
+.admin-shell .tabular-nums,
+.admin-shell [data-tabular] { font-variant-numeric: tabular-nums; }

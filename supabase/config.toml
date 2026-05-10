@@ -1,0 +1,44 @@
+project_id = "gnlvmszcysogydomahbk"
+
+# Daraja does not sign callbacks and Safaricom servers don't send a JWT.
+# We rely on the unguessable CheckoutRequestID + an optional ?token=… shared
+# secret (MPESA_CALLBACK_TOKEN) instead.
+[functions.mpesa-callback]
+verify_jwt = false
+
+# Initiate is called from the browser without a logged-in user.
+[functions.mpesa-initiate]
+verify_jwt = false
+
+# send-email is called from public forms (reservation, contact, order) by
+# anonymous browser visitors. The function itself locks recipients to the
+# email recorded in the matching DB row, so the public surface is safe.
+[functions.send-email]
+verify_jwt = false
+
+# send-sms is called from public forms (reservation, order) by anonymous
+# browser visitors. The function locks the recipient phone to the value on
+# the matching DB row and uses a 5-minute idempotency window, so the public
+# surface is safe.
+[functions.send-sms]
+verify_jwt = false
+
+# Daraja Reversal result callback. Public webhook, correlated by ConversationID
+# stored on payments.refund_request_id; optional ?token=… shared secret via
+# MPESA_REVERSAL_TOKEN.
+[functions.mpesa-reversal-result]
+verify_jwt = false
+
+# Public WhatsApp sender (Phase 6.3) called from public reservation/order
+# forms; recipient is locked to the DB record by the function.
+[functions.send-whatsapp]
+verify_jwt = false
+
+# Public liveness probe for UptimeRobot/Pingdom — no JWT required.
+[functions.health]
+verify_jwt = false
+
+# Public invitation acceptance endpoint. Caller has no session yet — the
+# function validates a one-time token (hashed) tied to the invited email.
+[functions.admin-accept-invite]
+verify_jwt = false

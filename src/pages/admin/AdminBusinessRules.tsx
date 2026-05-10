@@ -71,9 +71,9 @@ export default function AdminBusinessRules() {
         </Button>
       </div>
 
-      <Alert className="bg-blue-950 border-blue-800">
-        <Info className="h-4 w-4 text-blue-400" />
-        <AlertDescription className="text-blue-100">
+      <Alert className="bg-primary/10 border-primary/30">
+        <Info className="h-4 w-4 text-primary" />
+        <AlertDescription className="text-foreground/90">
           Business rules are enforced at the database level through constraints and triggers. Changes take effect immediately across all operations.
         </AlertDescription>
       </Alert>

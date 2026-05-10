@@ -191,6 +191,15 @@ Deno.serve((req) => withTimedLog("mpesa-initiate", async () => {
       body: JSON.stringify(stkBody),
     });
     const stkData = await stkRes.json();
+    logger.info("mpesa-initiate daraja response", {
+      http_status: stkRes.status,
+      response_code: stkData.ResponseCode,
+      response_desc: stkData.ResponseDescription,
+      error_code: stkData.errorCode,
+      error_message: stkData.errorMessage,
+      shortcode_prefix: String(shortcode).slice(0, 3),
+      callback_host: (() => { try { return new URL(callbackUrl).host; } catch { return "invalid"; } })(),
+    });
 
     if (!stkRes.ok || stkData.ResponseCode !== "0") {
       // Persist the failed attempt for debugging

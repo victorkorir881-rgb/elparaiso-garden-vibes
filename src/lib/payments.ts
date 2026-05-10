@@ -27,7 +27,21 @@ export function useInitiateMpesaPayment() {
         "mpesa-initiate",
         { body: input },
       );
-      if (error) throw new Error(error.message ?? "Failed to start payment");
+      if (error) {
+        // supabase-js returns a generic "non-2xx" message on errors; dig into
+        // the underlying Response so the user sees Daraja's actual reason
+        // (e.g. "Invalid PassKey", "Invalid CallBackURL", "Bad Request").
+        let detail: string | undefined;
+        try {
+          const resp = (error as unknown as { context?: { response?: Response } })
+            .context?.response;
+          if (resp) {
+            const body = await resp.clone().json().catch(() => null);
+            detail = (body && (body.error || body.message)) || undefined;
+          }
+        } catch { /* ignore */ }
+        throw new Error(detail ?? error.message ?? "Failed to start payment");
+      }
       if (!data) throw new Error("No response from payment service");
       return data;
     },

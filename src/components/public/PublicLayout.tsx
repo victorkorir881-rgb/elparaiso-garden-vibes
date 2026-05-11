@@ -7,6 +7,7 @@ import { useSettings } from "@/lib/supabase-hooks";
 import { useAuth } from "@/lib/auth";
 import { useCart } from "@/contexts/CartContext";
 import CartDrawer from "@/components/public/CartDrawer";
+import CustomerInstallButton from "@/components/public/CustomerInstallButton";
 
 const navLinks = [
   { to: "/", label: "Home" },
@@ -76,6 +77,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
               ) : (
                 <Link to="/login" search={{ redirect: undefined } as any}><Button size="sm" variant="outline" className="rounded-full"><LogIn className="w-4 h-4 mr-1.5" />Sign in</Button></Link>
               )}
+              <CustomerInstallButton />
               <Link to="/reservations"><Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90">Reserve</Button></Link>
             </div>
 
@@ -123,6 +125,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
                     </nav>
                     <div className="p-4 border-t border-border space-y-3">
                       <a href={`tel:${phone}`} className="flex items-center gap-2 text-sm text-muted-foreground"><Phone className="w-4 h-4 text-primary" />{phone}</a>
+                      <CustomerInstallButton />
                       <Link to="/reservations" onClick={() => setMobileOpen(false)}><Button className="w-full bg-primary text-primary-foreground">Reserve a Table</Button></Link>
                     </div>
                   </div>
@@ -167,6 +170,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
           <div className="border-t border-border mt-8 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
             <p>© {new Date().getFullYear()} Elparaiso Garden Kisii. All rights reserved.</p>
             <div className="flex gap-4">
+              <Link to="/install" className="hover:text-primary transition-colors">Install app</Link>
               <Link to="/privacy" className="hover:text-primary transition-colors">Privacy Policy</Link>
               <Link to="/terms" className="hover:text-primary transition-colors">Terms</Link>
             </div>

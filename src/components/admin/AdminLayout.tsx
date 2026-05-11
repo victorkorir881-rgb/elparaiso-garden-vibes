@@ -59,10 +59,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const { user, loading, isAuthenticated, signOut } = useAuth();
+  const { user, loading, isAuthenticated, signOut, refresh } = useAuth();
 
   const { data: unreadCount } = useUnreadMessageCount();
   useRealtimeAdminSync();
+
+  // Auth context skips admin role/profile lookups on the customer site to keep
+  // those requests off the customer's network panel. Now that we're inside
+  // the admin shell, refresh once to load the real role + profile.
+  useEffect(() => {
+    if (isAuthenticated && (!user?.role || user.role === "user")) {
+      void refresh();
+    }
+  }, [isAuthenticated, user?.role, refresh]);
 
   useEffect(() => {
     if (!loading && !isAuthenticated) navigate({ to: "/admin/login" });

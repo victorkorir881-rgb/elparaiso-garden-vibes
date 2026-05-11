@@ -51,6 +51,12 @@ export default function OrderPage() {
   const [step, setStep] = useState<Step>(1);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
 
+  // Scroll to the top of the page whenever the checkout step changes so
+  // customers always see the new step from the start instead of mid-page.
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+  }, [step]);
+
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);

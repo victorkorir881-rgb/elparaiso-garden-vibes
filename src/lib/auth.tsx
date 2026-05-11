@@ -52,10 +52,17 @@ async function fetchAdminProfile(userId: string): Promise<{ name: string | null;
 }
 
 async function buildAdminUser(user: User): Promise<AdminUser> {
-  const [role, profile] = await Promise.all([
-    fetchAdminRole(user.id),
-    fetchAdminProfile(user.id),
-  ]);
+  // Only query admin tables when the user is actually inside the admin
+  // portal. On the customer site, we treat everyone as role "user" so no
+  // admin-related requests appear in the customer's network panel.
+  const onAdminRoute =
+    typeof window !== "undefined" &&
+    window.location.pathname.startsWith("/admin");
+
+  const role = onAdminRoute ? await fetchAdminRole(user.id) : "user";
+  const profile = onAdminRoute && role !== "user"
+    ? await fetchAdminProfile(user.id)
+    : { name: null as string | null, email: null as string | null };
   return {
     id: user.id,
     name: profile.name ?? user.user_metadata?.full_name ?? user.email,

@@ -20,7 +20,7 @@ import { Loader2, Trash2, Edit2, Eye, Download, Undo2, ShieldCheck, ShieldX, Ale
 import { toast } from "sonner";
 import { downloadCsv } from "@/lib/csv-export";
 
-const statusOptions = ["pending", "confirmed", "preparing", "ready", "out-for-delivery", "completed", "cancelled"];
+const statusOptions = ["pending", "preparing", "ready", "out-for-delivery", "completed", "cancelled"];
 const orderTypeOptions = ["dine-in", "takeaway", "delivery"];
 
 const statusColors: Record<string, string> = {
@@ -95,7 +95,7 @@ export default function AdminOrders() {
       estimated_time: editingTime ? parseInt(editingTime) : undefined,
     }, {
       onSuccess: () => { toast.success("Order updated"); setSelectedOrder(null); },
-      onError: () => toast.error("Failed to update order"),
+      onError: (err: any) => toast.error(err?.message || "Failed to update order"),
     });
   };
 

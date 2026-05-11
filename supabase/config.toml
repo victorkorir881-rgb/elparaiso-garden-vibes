@@ -10,6 +10,12 @@ verify_jwt = false
 [functions.mpesa-initiate]
 verify_jwt = false
 
+# Public polling endpoint used by the checkout UI to read M-Pesa payment
+# status without depending on RLS / view grants. Reads via service role,
+# returns only non-sensitive fields keyed by the unguessable payment uuid.
+[functions.payment-status]
+verify_jwt = false
+
 # send-email is called from public forms (reservation, contact, order) by
 # anonymous browser visitors. The function itself locks recipients to the
 # email recorded in the matching DB row, so the public surface is safe.

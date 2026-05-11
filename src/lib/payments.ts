@@ -147,32 +147,26 @@ export function usePaymentStatus(paymentId: string | null, intervalMs = 3000) {
     },
     queryFn: async () => {
       if (!paymentId) return null;
-      const sb = supabase as any;
-      // Core fields are always available on payments_public (since 0018) and
-      // are the only ones strictly needed to drive the success/failed UI.
-      // Selecting them alone keeps polling working even if a later migration
-      // (0024) that adds manual_claim_* to the view hasn't been applied yet.
-      const coreCols = "id, status, result_desc, mpesa_receipt_number";
-      const core = await sb
-        .from("payments_public")
-        .select(coreCols)
-        .eq("id", paymentId)
-        .maybeSingle();
-      if (core.error) throw core.error;
-      if (!core.data) return null;
-
-      // Best-effort: enrich with manual-claim fields. If the view/grants
-      // don't expose them yet, silently skip — the success path doesn't
-      // depend on these.
-      let manual: Partial<PaymentRow> = {};
-      const manualRes = await sb
-        .from("payments_public")
-        .select("manual_claim_status, manual_reference, manual_notes, manual_verified_at")
-        .eq("id", paymentId)
-        .maybeSingle();
-      if (!manualRes.error && manualRes.data) manual = manualRes.data;
-
-      return { ...(core.data as PaymentRow), ...manual } as PaymentRow;
+      // Read via the dedicated `payment-status` edge function (service role)
+      // instead of the `payments_public` view. This bypasses RLS / view-grant
+      // drift that previously caused the UI to stay stuck on "Waiting for
+      // confirmation" even after mpesa-callback had updated the row.
+      const { data, error } = await supabase.functions.invoke<PaymentRow>(
+        "payment-status",
+        { body: { paymentId } },
+      );
+      if (error) throw new Error(error.message ?? "Failed to fetch payment status");
+      if (!data) return null;
+      return {
+        id: data.id,
+        status: data.status,
+        result_desc: data.result_desc ?? null,
+        mpesa_receipt_number: data.mpesa_receipt_number ?? null,
+        manual_claim_status: data.manual_claim_status ?? "none",
+        manual_reference: data.manual_reference ?? null,
+        manual_notes: data.manual_notes ?? null,
+        manual_verified_at: data.manual_verified_at ?? null,
+      } satisfies PaymentRow;
     },
   });
 

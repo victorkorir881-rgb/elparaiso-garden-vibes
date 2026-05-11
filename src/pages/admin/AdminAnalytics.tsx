@@ -196,15 +196,15 @@ export default function AdminAnalytics() {
         <h2 className="text-sm font-semibold text-foreground mb-4">Orders &amp; Revenue per Day</h2>
         <div className="h-72">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={daily}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="date" stroke="var(--muted-foreground)" fontSize={11} />
-              <YAxis yAxisId="left" stroke="var(--muted-foreground)" fontSize={11} />
-              <YAxis yAxisId="right" orientation="right" stroke="var(--muted-foreground)" fontSize={11} />
-              <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--foreground)" }} />
-              <Legend wrapperStyle={{ color: "var(--foreground)" }} />
-              <Line yAxisId="left" type="monotone" dataKey="orders" stroke="var(--primary)" strokeWidth={2} dot={false} />
-              <Line yAxisId="right" type="monotone" dataKey="revenue" stroke="#22c55e" strokeWidth={2} dot={false} />
+          <LineChart data={daily}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+              <XAxis dataKey="date" stroke="#94a3b8" fontSize={11} />
+              <YAxis yAxisId="left" stroke="#94a3b8" fontSize={11} />
+              <YAxis yAxisId="right" orientation="right" stroke="#94a3b8" fontSize={11} />
+              <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, color: "#f1f5f9" }} />
+              <Legend wrapperStyle={{ color: "#f1f5f9" }} />
+              <Line yAxisId="left" type="monotone" dataKey="orders" stroke="#38bdf8" strokeWidth={2} dot={{ r: 3, fill: "#38bdf8" }} activeDot={{ r: 5 }} />
+              <Line yAxisId="right" type="monotone" dataKey="revenue" stroke="#22c55e" strokeWidth={2} dot={{ r: 3, fill: "#22c55e" }} activeDot={{ r: 5 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -218,12 +218,12 @@ export default function AdminAnalytics() {
               <div className="h-full flex items-center justify-center text-sm text-muted-foreground">No order data in range</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={topItems} layout="vertical" margin={{ left: 24 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis type="number" stroke="var(--muted-foreground)" fontSize={11} />
-                  <YAxis type="category" dataKey="name" stroke="var(--muted-foreground)" fontSize={11} width={120} />
-                  <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--foreground)" }} />
-                  <Bar dataKey="qty" fill="var(--primary)" radius={[0, 4, 4, 0]} />
+              <BarChart data={topItems} layout="vertical" margin={{ left: 24 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <XAxis type="number" stroke="#94a3b8" fontSize={11} />
+                  <YAxis type="category" dataKey="name" stroke="#94a3b8" fontSize={11} width={120} />
+                  <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, color: "#f1f5f9" }} cursor={{ fill: "rgba(56,189,248,0.08)" }} />
+                  <Bar dataKey="qty" fill="#38bdf8" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -235,12 +235,12 @@ export default function AdminAnalytics() {
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={peakHours}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="hour" stroke="var(--muted-foreground)" fontSize={10} interval={1} />
-                <YAxis stroke="var(--muted-foreground)" fontSize={11} />
-                <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--foreground)" }} />
-                <Legend wrapperStyle={{ color: "var(--foreground)" }} />
-                <Bar dataKey="orders" stackId="a" fill="var(--primary)" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <XAxis dataKey="hour" stroke="#94a3b8" fontSize={10} interval={1} />
+                <YAxis stroke="#94a3b8" fontSize={11} />
+                <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, color: "#f1f5f9" }} cursor={{ fill: "rgba(56,189,248,0.08)" }} />
+                <Legend wrapperStyle={{ color: "#f1f5f9" }} />
+                <Bar dataKey="orders" stackId="a" fill="#38bdf8" />
                 <Bar dataKey="reservations" stackId="a" fill="#a78bfa" />
               </BarChart>
             </ResponsiveContainer>

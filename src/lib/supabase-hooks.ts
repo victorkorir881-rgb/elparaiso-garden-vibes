@@ -534,16 +534,22 @@ export function useCreateOrder() {
       estimated_time?: number;
       payment_method?: string;
     }) => {
-      // Generate id client-side; anon visitors can INSERT but not SELECT orders.
-      const id = (typeof crypto !== "undefined" && "randomUUID" in crypto)
+      const id = typeof crypto !== "undefined" && "randomUUID" in crypto
         ? crypto.randomUUID()
         : undefined;
       const row = id ? { id, ...input } : input;
-      const { error } = await supabase.from("orders").insert(row);
+      const { data, error } = await supabase
+        .from("orders")
+        .insert(row)
+        .select("id, order_number")
+        .single();
       if (error) throw error;
       // Order confirmation email/SMS are sent after a successful M-Pesa payment
       // (see supabase/functions/mpesa-callback/index.ts), not at order creation.
-      return { id, order_number: input.order_number } as { id: string | undefined; order_number: string };
+      return {
+        id: data?.id ?? id,
+        order_number: data?.order_number ?? input.order_number,
+      } as { id: string | undefined; order_number: string };
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["orders"] }),
   });

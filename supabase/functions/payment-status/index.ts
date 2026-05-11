@@ -45,9 +45,7 @@ Deno.serve(async (req) => {
 
     const { data, error } = await supabase
       .from("payments")
-      .select(
-        "id, status, result_desc, mpesa_receipt_number, completed_at, manual_claim_status, manual_reference, manual_notes, manual_verified_at",
-      )
+      .select("*")
       .eq("id", paymentId)
       .maybeSingle();
 
@@ -57,7 +55,17 @@ Deno.serve(async (req) => {
     }
     if (!data) return json({ error: "Not found" }, 404);
 
-    return json(data, 200);
+    return json({
+      id: data.id,
+      status: data.status,
+      result_desc: data.result_desc ?? null,
+      mpesa_receipt_number: data.mpesa_receipt_number ?? null,
+      completed_at: data.completed_at ?? null,
+      manual_claim_status: data.manual_claim_status ?? "none",
+      manual_reference: data.manual_reference ?? null,
+      manual_notes: data.manual_notes ?? null,
+      manual_verified_at: data.manual_verified_at ?? null,
+    }, 200);
   } catch (e) {
     console.error("payment-status error", e);
     return json({ error: (e as Error).message ?? "Unknown error" }, 500);

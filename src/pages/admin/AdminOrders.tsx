@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import {
   useOrders,
   useOrderStats,
@@ -16,12 +17,34 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Trash2, Edit2, Eye, Download, Undo2, ShieldCheck, ShieldX, AlertTriangle } from "lucide-react";
+import { Loader2, Trash2, Edit2, Eye, Download, Undo2, ShieldCheck, ShieldX, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { downloadCsv } from "@/lib/csv-export";
 
+const routeApi = getRouteApi("/admin/orders");
+const PAGE_SIZE = 20;
+const STATUS_RANK: Record<string, number> = {
+  pending: 0,
+  preparing: 1,
+  ready: 2,
+  "out-for-delivery": 3,
+  completed: 4,
+  cancelled: 5,
+};
+
 const statusOptions = ["pending", "preparing", "ready", "out-for-delivery", "completed", "cancelled"];
 const orderTypeOptions = ["dine-in", "takeaway", "delivery"];
+
+// Mirrors sql/0006_order_state_machine.sql exactly. The DB rejects any
+// transition outside this graph, so the UI must only offer valid next steps.
+const ALLOWED_NEXT: Record<string, string[]> = {
+  pending: ["preparing", "cancelled"],
+  preparing: ["ready", "cancelled"],
+  ready: ["out-for-delivery", "completed", "cancelled"],
+  "out-for-delivery": ["completed", "cancelled"],
+  completed: [],
+  cancelled: [],
+};
 
 const statusColors: Record<string, string> = {
   pending: "bg-yellow-500/15 text-yellow-300 border border-yellow-500/30",
@@ -33,10 +56,39 @@ const statusColors: Record<string, string> = {
   cancelled: "bg-red-500/15 text-red-300 border border-red-500/30",
 };
 
+const formatStatus = (s: string) =>
+  s.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+
+const paymentColors: Record<string, string> = {
+  paid: "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30",
+  unpaid: "bg-amber-500/15 text-amber-300 border border-amber-500/30",
+  refunded: "bg-blue-500/15 text-blue-300 border border-blue-500/30",
+  pending: "bg-zinc-500/15 text-zinc-300 border border-zinc-500/30",
+};
+
 export default function AdminOrders() {
-  const [filterStatus, setFilterStatus] = useState<string>("");
-  const [filterType, setFilterType] = useState<string>("");
-  const [search, setSearch] = useState("");
+  const { status: filterStatus, type: filterType, q: searchParam, sort, page } = routeApi.useSearch();
+  const navigate = useNavigate({ from: "/admin/orders" });
+
+  // Debounced search input — keeps typing snappy without spamming the URL
+  const [searchInput, setSearchInput] = useState(searchParam);
+  useEffect(() => { setSearchInput(searchParam); }, [searchParam]);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (searchInput !== searchParam) {
+        navigate({ search: (p) => ({ ...p, q: searchInput, page: 1 }), replace: true });
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [searchInput, searchParam, navigate]);
+
+  const setSearchParam = <K extends "status" | "type" | "sort">(key: K, value: string) => {
+    navigate({ search: (p) => ({ ...p, [key]: value, page: 1 }) });
+  };
+  const setPage = (next: number) => {
+    navigate({ search: (p) => ({ ...p, page: next }) });
+  };
+
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [editingStatus, setEditingStatus] = useState("");
   const [editingNotes, setEditingNotes] = useState("");
@@ -45,8 +97,8 @@ export default function AdminOrders() {
   const [refundReason, setRefundReason] = useState("");
 
   const { data: orders = [], isLoading } = useOrders({
-    status: filterStatus && filterStatus !== "all" ? filterStatus : undefined,
-    search: search || undefined,
+    status: filterStatus !== "all" ? filterStatus : undefined,
+    search: searchParam || undefined,
   });
 
   const { data: stats } = useOrderStats();
@@ -57,6 +109,7 @@ export default function AdminOrders() {
   const { data: pendingClaims = [] } = usePendingManualClaims();
   const verifyManual = useVerifyManualPayment();
   const [verifyNotes, setVerifyNotes] = useState<Record<string, string>>({});
+
 
   const handleVerifyManual = (paymentId: string, approve: boolean) => {
     verifyManual.mutate(
@@ -88,12 +141,23 @@ export default function AdminOrders() {
 
   const handleUpdateOrder = async () => {
     if (!selectedOrder) return;
-    updateOrder.mutate({
-      id: selectedOrder.id,
-      status: editingStatus,
-      admin_notes: editingNotes,
-      estimated_time: editingTime ? parseInt(editingTime) : undefined,
-    }, {
+    const patch: Parameters<typeof updateOrder.mutate>[0] = { id: selectedOrder.id };
+    if (editingStatus && editingStatus !== selectedOrder.status) {
+      patch.status = editingStatus;
+    }
+    const trimmedNotes = editingNotes ?? "";
+    if (trimmedNotes !== (selectedOrder.admin_notes ?? "")) {
+      patch.admin_notes = trimmedNotes;
+    }
+    const parsedTime = editingTime ? parseInt(editingTime, 10) : undefined;
+    if (parsedTime !== (selectedOrder.estimated_time ?? undefined)) {
+      patch.estimated_time = parsedTime;
+    }
+    if (Object.keys(patch).length === 1) {
+      toast.info("No changes to save");
+      return;
+    }
+    updateOrder.mutate(patch, {
       onSuccess: () => { toast.success("Order updated"); setSelectedOrder(null); },
       onError: (err: any) => toast.error(err?.message || "Failed to update order"),
     });
@@ -103,7 +167,7 @@ export default function AdminOrders() {
     if (confirm("Are you sure you want to delete this order?")) {
       deleteOrder.mutate(id, {
         onSuccess: () => { toast.success("Order deleted"); setSelectedOrder(null); },
-        onError: () => toast.error("Failed to delete order"),
+        onError: (err: any) => toast.error(err?.message || "Failed to delete order"),
       });
     }
   };
@@ -115,12 +179,46 @@ export default function AdminOrders() {
     setEditingTime(order.estimated_time?.toString() || "");
   };
 
+  // Filter by type (status + search are pushed to the DB query) then sort.
   const filteredOrders = useMemo(() => {
-    return orders.filter((order: any) => {
-      if (filterType && filterType !== "all" && order.order_type !== filterType) return false;
+    const filtered = orders.filter((order: any) => {
+      if (filterType !== "all" && order.order_type !== filterType) return false;
       return true;
     });
-  }, [orders, filterType]);
+    const sorted = [...filtered] as any[];
+    const ts = (v: any) => new Date(String(v)).getTime();
+    switch (sort) {
+      case "oldest":
+        sorted.sort((a, b) => ts(a.created_at) - ts(b.created_at));
+        break;
+      case "total_desc":
+        sorted.sort((a, b) => parseFloat(b.total_amount) - parseFloat(a.total_amount));
+        break;
+      case "total_asc":
+        sorted.sort((a, b) => parseFloat(a.total_amount) - parseFloat(b.total_amount));
+        break;
+      case "status":
+        sorted.sort((a, b) => (STATUS_RANK[a.status] ?? 99) - (STATUS_RANK[b.status] ?? 99));
+        break;
+      case "newest":
+      default:
+        sorted.sort((a, b) => ts(b.created_at) - ts(a.created_at));
+    }
+    return sorted;
+  }, [orders, filterType, sort]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  // Snap back to a valid page if filters shrink the result set below current page.
+  useEffect(() => {
+    if (safePage !== page) {
+      navigate({ search: (p) => ({ ...p, page: safePage }), replace: true });
+    }
+  }, [safePage, page, navigate]);
+  const pagedOrders = useMemo(
+    () => filteredOrders.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [filteredOrders, safePage],
+  );
 
   return (
     <div className="space-y-6">
@@ -206,18 +304,22 @@ export default function AdminOrders() {
       )}
 
       <Card className="p-4">
-        <div className="grid md:grid-cols-4 gap-4">
-          <Input placeholder="Search by order #, name, or phone..." value={search} onChange={(e) => setSearch(e.target.value)} />
-          <Select value={filterStatus || "all"} onValueChange={setFilterStatus}>
+        <div className="grid md:grid-cols-5 gap-4">
+          <Input
+            placeholder="Search by order #, name, or phone..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+          />
+          <Select value={filterStatus} onValueChange={(v) => setSearchParam("status", v)}>
             <SelectTrigger><SelectValue placeholder="Filter by status" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Statuses</SelectItem>
               {statusOptions.map((status) => (
-                <SelectItem key={status} value={status}>{status.charAt(0).toUpperCase() + status.slice(1)}</SelectItem>
+                <SelectItem key={status} value={status}>{formatStatus(status)}</SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <Select value={filterType || "all"} onValueChange={setFilterType}>
+          <Select value={filterType} onValueChange={(v) => setSearchParam("type", v)}>
             <SelectTrigger><SelectValue placeholder="Filter by type" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Types</SelectItem>
@@ -226,7 +328,24 @@ export default function AdminOrders() {
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" onClick={() => { setFilterStatus("all"); setFilterType("all"); setSearch(""); }}>Reset Filters</Button>
+          <Select value={sort} onValueChange={(v) => setSearchParam("sort", v)}>
+            <SelectTrigger><SelectValue placeholder="Sort by" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="newest">Newest first</SelectItem>
+              <SelectItem value="oldest">Oldest first</SelectItem>
+              <SelectItem value="total_desc">Total (high → low)</SelectItem>
+              <SelectItem value="total_asc">Total (low → high)</SelectItem>
+              <SelectItem value="status">Status (workflow order)</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            variant="outline"
+            onClick={() =>
+              navigate({ search: { status: "all", type: "all", q: "", sort: "newest", page: 1 } })
+            }
+          >
+            Reset Filters
+          </Button>
         </div>
       </Card>
 
@@ -240,211 +359,360 @@ export default function AdminOrders() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {filteredOrders.map((order: any) => (
-            <Card key={order.id} className="p-4">
-              <div className="grid md:grid-cols-5 gap-4 items-center">
-                <div>
-                  <p className="text-sm text-foreground/60">Order #</p>
-                  <p className="font-semibold font-display">{order.order_number}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-foreground/60">Customer</p>
-                  <p className="font-medium">{order.customer_name}</p>
-                  <p className="text-xs text-foreground/60">{order.customer_phone}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-foreground/60">Type</p>
-                  <Badge variant="outline" className="capitalize">{order.order_type}</Badge>
-                </div>
-                <div>
-                  <p className="text-sm text-foreground/60">Status</p>
-                  <Badge className={statusColors[order.status]}>{order.status}</Badge>
-                </div>
-                <div className="flex gap-2 justify-end">
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button size="sm" variant="outline" onClick={() => openOrderDetails(order)}>
-                        <Eye className="w-4 h-4" />
+          <div className="flex items-center justify-between text-xs text-foreground/60 px-1">
+            <span>
+              Showing{" "}
+              <span className="text-foreground font-medium">
+                {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filteredOrders.length)}
+              </span>{" "}
+              of <span className="text-foreground font-medium">{filteredOrders.length}</span>
+            </span>
+            <span>Page {safePage} of {totalPages}</span>
+          </div>
+          {pagedOrders.map((order: any) => {
+            const allowed = ALLOWED_NEXT[order.status] ?? [];
+            const isUpdatingThis =
+              updateOrder.isPending && updateOrder.variables?.id === order.id;
+            const canMarkPaid =
+              order.payment_status === "unpaid" &&
+              !["cancelled"].includes(order.status);
+            return (
+              <Card key={order.id} className="p-4">
+                <div className="grid md:grid-cols-12 gap-4 items-center">
+                  <div className="md:col-span-2">
+                    <p className="text-xs text-foreground/60">Order #</p>
+                    <p className="font-semibold font-display truncate">{order.order_number}</p>
+                    <p className="text-[10px] text-foreground/50 mt-0.5">
+                      {new Date(order.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="md:col-span-3 min-w-0">
+                    <p className="text-xs text-foreground/60">Customer</p>
+                    <p className="font-medium truncate">{order.customer_name}</p>
+                    <p className="text-xs text-foreground/60 truncate">{order.customer_phone}</p>
+                  </div>
+                  <div className="md:col-span-1">
+                    <p className="text-xs text-foreground/60">Type</p>
+                    <Badge variant="outline" className="capitalize">{order.order_type}</Badge>
+                  </div>
+                  <div className="md:col-span-1">
+                    <p className="text-xs text-foreground/60">Total</p>
+                    <p className="font-semibold text-primary">
+                      {parseFloat(order.total_amount).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="md:col-span-1">
+                    <p className="text-xs text-foreground/60">Payment</p>
+                    <Badge className={paymentColors[order.payment_status] ?? ""}>
+                      {order.payment_status}
+                    </Badge>
+                  </div>
+                  <div className="md:col-span-2">
+                    <p className="text-xs text-foreground/60 mb-1">Status</p>
+                    {allowed.length === 0 ? (
+                      <Badge className={statusColors[order.status]}>
+                        {formatStatus(order.status)}
+                      </Badge>
+                    ) : (
+                      <Select
+                        value={order.status}
+                        disabled={isUpdatingThis}
+                        onValueChange={(next) => {
+                          if (next === order.status) return;
+                          if (next === "completed" && order.payment_status === "unpaid") {
+                            toast.error("Mark this order as paid before completing it.");
+                            return;
+                          }
+                          if (next === "cancelled" && !confirm(`Cancel order ${order.order_number}?`)) return;
+                          updateOrder.mutate(
+                            { id: order.id, status: next },
+                            {
+                              onSuccess: () => toast.success(`Status → ${formatStatus(next)}`),
+                              onError: (err: any) =>
+                                toast.error(err?.message ?? "Failed to update status"),
+                            },
+                          );
+                        }}
+                      >
+                        <SelectTrigger className="h-9">
+                          {isUpdatingThis ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <SelectValue />
+                          )}
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={order.status} disabled>
+                            {formatStatus(order.status)} (current)
+                          </SelectItem>
+                          {allowed.map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {formatStatus(s)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+                  <div className="md:col-span-2 flex gap-2 justify-end">
+                    {canMarkPaid && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={updateOrder.isPending}
+                        onClick={() =>
+                          updateOrder.mutate(
+                            { id: order.id, payment_status: "paid" },
+                            {
+                              onSuccess: () => toast.success("Marked as paid"),
+                              onError: (e: any) => toast.error(e?.message ?? "Failed"),
+                            },
+                          )
+                        }
+                      >
+                        Mark Paid
                       </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-2xl">
-                      <DialogHeader>
-                        <DialogTitle>Order Details: {selectedOrder?.order_number}</DialogTitle>
-                      </DialogHeader>
-                      {selectedOrder && (
-                        <div className="space-y-4">
-                          <div className="grid md:grid-cols-2 gap-4">
+                    )}
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button size="sm" variant="outline" onClick={() => openOrderDetails(order)}>
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <DialogHeader>
+                          <DialogTitle>Order Details: {selectedOrder?.order_number}</DialogTitle>
+                        </DialogHeader>
+                        {selectedOrder && (
+                          <div className="space-y-4">
+                            <div className="grid md:grid-cols-2 gap-4">
+                              <div>
+                                <label className="text-sm font-medium">Customer Name</label>
+                                <p className="text-foreground/70">{selectedOrder.customer_name}</p>
+                              </div>
+                              <div>
+                                <label className="text-sm font-medium">Phone</label>
+                                <p className="text-foreground/70">{selectedOrder.customer_phone}</p>
+                              </div>
+                              <div>
+                                <label className="text-sm font-medium">Order Type</label>
+                                <p className="text-foreground/70 capitalize">{selectedOrder.order_type}</p>
+                              </div>
+                              <div>
+                                <label className="text-sm font-medium">Total Amount</label>
+                                <p className="text-lg font-bold text-primary">KES {parseFloat(selectedOrder.total_amount).toLocaleString()}</p>
+                              </div>
+                              {selectedOrder.delivery_address && (
+                                <div className="md:col-span-2">
+                                  <label className="text-sm font-medium">Delivery Address</label>
+                                  <p className="text-foreground/70">{selectedOrder.delivery_address}</p>
+                                </div>
+                              )}
+                            </div>
+
                             <div>
-                              <label className="text-sm font-medium">Customer Name</label>
-                              <p className="text-foreground/70">{selectedOrder.customer_name}</p>
-                            </div>
-                            <div>
-                              <label className="text-sm font-medium">Phone</label>
-                              <p className="text-foreground/70">{selectedOrder.customer_phone}</p>
-                            </div>
-                            <div>
-                              <label className="text-sm font-medium">Order Type</label>
-                              <p className="text-foreground/70 capitalize">{selectedOrder.order_type}</p>
-                            </div>
-                            <div>
-                              <label className="text-sm font-medium">Total Amount</label>
-                              <p className="text-lg font-bold text-primary">KES {parseFloat(selectedOrder.total_amount).toLocaleString()}</p>
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className="text-sm font-medium mb-2 block">Items</label>
-                            <div className="bg-muted p-3 rounded-lg text-sm space-y-1">
-                              {Array.isArray(selectedOrder.items) &&
-                                selectedOrder.items.map((item: any, idx: number) => (
-                                  <div key={idx} className="flex justify-between">
-                                    <span>{item.name} x{item.quantity}</span>
-                                    <span>KES {(parseFloat(item.price) * item.quantity).toLocaleString()}</span>
-                                  </div>
-                                ))}
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className="text-sm font-medium mb-2 block">Status</label>
-                            <Select value={editingStatus} onValueChange={setEditingStatus}>
-                              <SelectTrigger><SelectValue /></SelectTrigger>
-                              <SelectContent>
-                                {statusOptions.map((status) => (
-                                  <SelectItem key={status} value={status}>{status.charAt(0).toUpperCase() + status.slice(1)}</SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          <div>
-                            <label className="text-sm font-medium mb-2 block">Estimated Time (minutes)</label>
-                            <Input type="number" value={editingTime} onChange={(e) => setEditingTime(e.target.value)} placeholder="e.g., 30" />
-                          </div>
-
-                          <div>
-                            <label className="text-sm font-medium mb-2 block">Admin Notes</label>
-                            <Textarea value={editingNotes} onChange={(e) => setEditingNotes(e.target.value)} placeholder="Add internal notes..." rows={3} />
-                          </div>
-
-                          <div>
-                            <label className="text-sm font-medium mb-2 block">Payments</label>
-                            {orderPayments.length === 0 ? (
-                              <p className="text-sm text-foreground/60">No M-Pesa payment attempts recorded.</p>
-                            ) : (
-                              <div className="space-y-2">
-                                {orderPayments.map((p) => (
-                                  <div key={p.id} className="bg-muted p-3 rounded-lg text-sm space-y-3">
-                                    <div className="flex items-center justify-between gap-3">
-                                      <div className="min-w-0">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                          <span className="font-mono text-xs">{p.mpesa_receipt_number ?? p.manual_reference ?? "—"}</span>
-                                          <Badge variant="outline" className="capitalize">{p.status}</Badge>
-                                          {p.manual_claim_status === "claimed" && (
-                                            <Badge className="bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                                              Manual claim — awaiting verification
-                                            </Badge>
-                                          )}
-                                          {p.manual_claim_status === "verified" && (
-                                            <Badge className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                                              Manually verified
-                                            </Badge>
-                                          )}
-                                          {p.manual_claim_status === "rejected" && (
-                                            <Badge className="bg-red-500/15 text-red-300 border border-red-500/30">
-                                              Claim rejected
-                                            </Badge>
-                                          )}
-                                          {p.refund_status !== "none" && (
-                                            <Badge
-                                              className={
-                                                p.refund_status === "refunded"
-                                                  ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
-                                                  : p.refund_status === "pending"
-                                                  ? "bg-yellow-500/15 text-yellow-300 border border-yellow-500/30"
-                                                  : "bg-red-500/15 text-red-300 border border-red-500/30"
-                                              }
-                                            >
-                                              Refund: {p.refund_status}
-                                            </Badge>
-                                          )}
-                                        </div>
-                                        <p className="text-xs text-foreground/60 mt-1">
-                                          KES {p.amount.toLocaleString()} · {new Date(p.created_at).toLocaleString()}
-                                          {p.refund_result_desc ? ` · ${p.refund_result_desc}` : ""}
-                                        </p>
-                                      </div>
-                                      {p.status === "success" && (p.refund_status === "none" || p.refund_status === "failed") && (
-                                        <Button
-                                          size="sm"
-                                          variant="outline"
-                                          onClick={() => {
-                                            setRefundTarget({ id: p.id, amount: p.amount, receipt: p.mpesa_receipt_number });
-                                            setRefundReason("");
-                                          }}
-                                        >
-                                          <Undo2 className="w-4 h-4 mr-1" /> Refund
-                                        </Button>
-                                      )}
+                              <label className="text-sm font-medium mb-2 block">Items</label>
+                              <div className="bg-muted p-3 rounded-lg text-sm space-y-1">
+                                {Array.isArray(selectedOrder.items) &&
+                                  selectedOrder.items.map((item: any, idx: number) => (
+                                    <div key={idx} className="flex justify-between">
+                                      <span>{item.name} x{item.quantity}</span>
+                                      <span>KES {(parseFloat(item.price) * item.quantity).toLocaleString()}</span>
                                     </div>
+                                  ))}
+                              </div>
+                            </div>
 
-                                    {p.manual_claim_status === "claimed" && (
-                                      <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 space-y-2">
-                                        <p className="text-xs text-amber-200">
-                                          Customer typed reference{" "}
-                                          <span className="font-mono font-semibold">{p.manual_reference}</span>
-                                          {p.manual_claimed_at ? ` at ${new Date(p.manual_claimed_at).toLocaleString()}` : ""}.
-                                          Confirm against M-Pesa Business portal before approving.
-                                        </p>
-                                        <Input
-                                          placeholder="Internal note (optional)"
-                                          value={verifyNotes[p.id] ?? ""}
-                                          onChange={(e) => setVerifyNotes((s) => ({ ...s, [p.id]: e.target.value }))}
-                                          className="h-8 text-xs"
-                                        />
-                                        <div className="flex gap-2">
-                                          <Button
-                                            size="sm"
-                                            className="flex-1"
-                                            disabled={verifyManual.isPending}
-                                            onClick={() => handleVerifyManual(p.id, true)}
-                                          >
-                                            <ShieldCheck className="w-4 h-4 mr-1" /> Approve & notify customer
-                                          </Button>
+                            <div>
+                              <label className="text-sm font-medium mb-2 block">Status</label>
+                              <Select value={editingStatus} onValueChange={setEditingStatus}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value={selectedOrder.status} disabled>
+                                    {formatStatus(selectedOrder.status)} (current)
+                                  </SelectItem>
+                                  {(ALLOWED_NEXT[selectedOrder.status] ?? []).map((status) => (
+                                    <SelectItem key={status} value={status}>
+                                      {formatStatus(status)}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {(ALLOWED_NEXT[selectedOrder.status] ?? []).length === 0 && (
+                                <p className="text-xs text-foreground/60 mt-1">
+                                  This order is in a terminal state and cannot be changed.
+                                </p>
+                              )}
+                            </div>
+
+                            <div>
+                              <label className="text-sm font-medium mb-2 block">Estimated Time (minutes)</label>
+                              <Input type="number" value={editingTime} onChange={(e) => setEditingTime(e.target.value)} placeholder="e.g., 30" />
+                            </div>
+
+                            <div>
+                              <label className="text-sm font-medium mb-2 block">Admin Notes</label>
+                              <Textarea value={editingNotes} onChange={(e) => setEditingNotes(e.target.value)} placeholder="Add internal notes..." rows={3} />
+                            </div>
+
+                            <div>
+                              <label className="text-sm font-medium mb-2 block">Payments</label>
+                              {orderPayments.length === 0 ? (
+                                <p className="text-sm text-foreground/60">No M-Pesa payment attempts recorded.</p>
+                              ) : (
+                                <div className="space-y-2">
+                                  {orderPayments.map((p) => (
+                                    <div key={p.id} className="bg-muted p-3 rounded-lg text-sm space-y-3">
+                                      <div className="flex items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="font-mono text-xs">{p.mpesa_receipt_number ?? p.manual_reference ?? "—"}</span>
+                                            <Badge variant="outline" className="capitalize">{p.status}</Badge>
+                                            {p.manual_claim_status === "claimed" && (
+                                              <Badge className="bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                                                Manual claim — awaiting verification
+                                              </Badge>
+                                            )}
+                                            {p.manual_claim_status === "verified" && (
+                                              <Badge className="bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                                                Manually verified
+                                              </Badge>
+                                            )}
+                                            {p.manual_claim_status === "rejected" && (
+                                              <Badge className="bg-red-500/15 text-red-300 border border-red-500/30">
+                                                Claim rejected
+                                              </Badge>
+                                            )}
+                                            {p.refund_status !== "none" && (
+                                              <Badge
+                                                className={
+                                                  p.refund_status === "refunded"
+                                                    ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                                                    : p.refund_status === "pending"
+                                                    ? "bg-yellow-500/15 text-yellow-300 border border-yellow-500/30"
+                                                    : "bg-red-500/15 text-red-300 border border-red-500/30"
+                                                }
+                                              >
+                                                Refund: {p.refund_status}
+                                              </Badge>
+                                            )}
+                                          </div>
+                                          <p className="text-xs text-foreground/60 mt-1">
+                                            KES {p.amount.toLocaleString()} · {new Date(p.created_at).toLocaleString()}
+                                            {p.refund_result_desc ? ` · ${p.refund_result_desc}` : ""}
+                                          </p>
+                                        </div>
+                                        {p.status === "success" && (p.refund_status === "none" || p.refund_status === "failed") && (
                                           <Button
                                             size="sm"
                                             variant="outline"
-                                            disabled={verifyManual.isPending}
-                                            onClick={() => handleVerifyManual(p.id, false)}
+                                            onClick={() => {
+                                              setRefundTarget({ id: p.id, amount: p.amount, receipt: p.mpesa_receipt_number });
+                                              setRefundReason("");
+                                            }}
                                           >
-                                            <ShieldX className="w-4 h-4 mr-1" /> Reject
+                                            <Undo2 className="w-4 h-4 mr-1" /> Refund
                                           </Button>
-                                        </div>
+                                        )}
                                       </div>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
 
-                          <div className="flex gap-2 justify-end pt-4 border-t">
-                            <Button variant="outline" onClick={() => handleDeleteOrder(selectedOrder.id)} disabled={deleteOrder.isPending}>
-                              <Trash2 className="w-4 h-4 mr-2" /> Delete
-                            </Button>
-                            <Button onClick={handleUpdateOrder} disabled={updateOrder.isPending}>
-                              {updateOrder.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Edit2 className="w-4 h-4 mr-2" />}
-                              Save Changes
-                            </Button>
+                                      {p.manual_claim_status === "claimed" && (
+                                        <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 space-y-2">
+                                          <p className="text-xs text-amber-200">
+                                            Customer typed reference{" "}
+                                            <span className="font-mono font-semibold">{p.manual_reference}</span>
+                                            {p.manual_claimed_at ? ` at ${new Date(p.manual_claimed_at).toLocaleString()}` : ""}.
+                                            Confirm against M-Pesa Business portal before approving.
+                                          </p>
+                                          <Input
+                                            placeholder="Internal note (optional)"
+                                            value={verifyNotes[p.id] ?? ""}
+                                            onChange={(e) => setVerifyNotes((s) => ({ ...s, [p.id]: e.target.value }))}
+                                            className="h-8 text-xs"
+                                          />
+                                          <div className="flex gap-2">
+                                            <Button
+                                              size="sm"
+                                              className="flex-1"
+                                              disabled={verifyManual.isPending}
+                                              onClick={() => handleVerifyManual(p.id, true)}
+                                            >
+                                              <ShieldCheck className="w-4 h-4 mr-1" /> Approve & notify customer
+                                            </Button>
+                                            <Button
+                                              size="sm"
+                                              variant="outline"
+                                              disabled={verifyManual.isPending}
+                                              onClick={() => handleVerifyManual(p.id, false)}
+                                            >
+                                              <ShieldX className="w-4 h-4 mr-1" /> Reject
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="flex gap-2 justify-end pt-4 border-t">
+                              <Button variant="outline" onClick={() => handleDeleteOrder(selectedOrder.id)} disabled={deleteOrder.isPending}>
+                                <Trash2 className="w-4 h-4 mr-2" /> Delete
+                              </Button>
+                              <Button onClick={handleUpdateOrder} disabled={updateOrder.isPending}>
+                                {updateOrder.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Edit2 className="w-4 h-4 mr-2" />}
+                                Save Changes
+                              </Button>
+                            </div>
                           </div>
-                        </div>
-                      )}
-                    </DialogContent>
-                  </Dialog>
+                        )}
+                      </DialogContent>
+                    </Dialog>
+                  </div>
                 </div>
+              </Card>
+            );
+          })}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={safePage <= 1}
+                onClick={() => setPage(safePage - 1)}
+              >
+                <ChevronLeft className="w-4 h-4 mr-1" /> Previous
+              </Button>
+              <div className="flex items-center gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter((n) => n === 1 || n === totalPages || Math.abs(n - safePage) <= 1)
+                  .map((n, i, arr) => (
+                    <span key={n} className="flex items-center">
+                      {i > 0 && arr[i - 1] !== n - 1 && (
+                        <span className="px-1 text-foreground/40">…</span>
+                      )}
+                      <Button
+                        variant={n === safePage ? "default" : "outline"}
+                        size="sm"
+                        className="w-9"
+                        onClick={() => setPage(n)}
+                      >
+                        {n}
+                      </Button>
+                    </span>
+                  ))}
               </div>
-            </Card>
-          ))}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={safePage >= totalPages}
+                onClick={() => setPage(safePage + 1)}
+              >
+                Next <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+          )}
         </div>
       )}
 

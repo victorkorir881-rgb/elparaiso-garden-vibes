@@ -7,9 +7,28 @@ import { fireTransactionalSms } from "@/lib/sms";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 // ─── SITE SETTINGS ─────────────────────────────────────────────────────────
+let _settingsRealtimeBound = false;
+function bindSettingsRealtime(qc: ReturnType<typeof useQueryClient>) {
+  if (_settingsRealtimeBound || typeof window === "undefined") return;
+  _settingsRealtimeBound = true;
+  supabase
+    .channel("public:site_settings")
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "site_settings" },
+      () => qc.invalidateQueries({ queryKey: ["settings"] }),
+    )
+    .subscribe();
+}
+
 export function useSettings() {
+  const qc = useQueryClient();
+  bindSettingsRealtime(qc);
   return useQuery({
     queryKey: ["settings"],
+    // Settings are small and customer-facing — keep them fresh.
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
     queryFn: async () => {
       const { data, error } = await supabase.from("site_settings").select("*");
       if (error) throw error;
@@ -24,14 +43,33 @@ export function useUpdateSettings() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (settings: Record<string, string>) => {
-      for (const [key, value] of Object.entries(settings)) {
-        const { error } = await supabase
-          .from("site_settings")
-          .upsert({ key, value, category: "general" }, { onConflict: "key" });
-        if (error) throw error;
-      }
+      // Single round-trip batch upsert — was N round trips, one per key.
+      const rows = Object.entries(settings).map(([key, value]) => ({
+        key,
+        value,
+        category: "general",
+      }));
+      if (rows.length === 0) return;
+      const { error } = await supabase
+        .from("site_settings")
+        .upsert(rows, { onConflict: "key" });
+      if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["settings"] }),
+    // Optimistic — write the new map straight into the cache so the UI
+    // reflects the change instantly while the server round-trip completes.
+    onMutate: async (settings) => {
+      await qc.cancelQueries({ queryKey: ["settings"] });
+      const prev = qc.getQueryData<Record<string, string>>(["settings"]);
+      qc.setQueryData<Record<string, string>>(["settings"], {
+        ...(prev ?? {}),
+        ...settings,
+      });
+      return { prev };
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["settings"], ctx.prev);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["settings"] }),
   });
 }
 

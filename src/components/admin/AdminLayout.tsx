@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Link, useLocation, useNavigate } from "@tanstack/react-router";
+import { Link, useLocation, useNavigate, useRouter } from "@tanstack/react-router";
 import {
   LayoutDashboard, UtensilsCrossed, CalendarCheck, PartyPopper,
   Images, MessageSquare, Settings, Search, Users, Menu, X,
@@ -57,12 +57,22 @@ const allItems = navSections.flatMap((s) => s.items);
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const location = useLocation({ select: (l) => l.pathname });
   const navigate = useNavigate();
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const { user, loading, isAuthenticated, signOut, refresh } = useAuth();
 
   const { data: unreadCount } = useUnreadMessageCount();
   useRealtimeAdminSync();
+
+  // Eagerly preload every admin route chunk + loader data the moment the
+  // shell mounts so tab switches are instant (no chunk fetch, no skeleton).
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    for (const item of allItems) {
+      void router.preloadRoute({ to: item.to });
+    }
+  }, [isAuthenticated, router]);
 
   // Auth context skips admin role/profile lookups on the customer site to keep
   // those requests off the customer's network panel. Now that we're inside
@@ -153,6 +163,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 return (
                   <Link
                     key={item.to} to={item.to}
+                    preload="intent"
                     onClick={() => setSidebarOpen(false)}
                     className={`relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
                       active

@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Bell, MessageSquare, CalendarCheck, Package, Star } from "lucide-react";
+import { Bell, MessageSquare, CalendarCheck, Package, Star, Check, X, CheckCheck } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,27 @@ import {
 } from "@/components/ui/popover";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDistanceToNow } from "date-fns";
+
+const DISMISS_KEY = "admin.notifications.dismissed.v1";
+
+function loadDismissed(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.localStorage.getItem(DISMISS_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw) as string[];
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveDismissed(set: Set<string>) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(DISMISS_KEY, JSON.stringify([...set]));
+  } catch {}
+}
 
 interface NotificationItem {
   id: string;
@@ -137,6 +158,26 @@ export default function NotificationCenter() {
   const [open, setOpen] = useState(false);
   const qc = useQueryClient();
   const { data } = useNotifications();
+  const [dismissed, setDismissed] = useState<Set<string>>(() => loadDismissed());
+
+  const dismiss = useCallback((id: string) => {
+    setDismissed((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      saveDismissed(next);
+      return next;
+    });
+  }, []);
+
+  const dismissAll = useCallback((ids: string[]) => {
+    setDismissed((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.add(id));
+      saveDismissed(next);
+      return next;
+    });
+  }, []);
+
   // Skip toasts on the very first realtime event burst that fires when the
   // channel subscribes against an already-populated table.
   const readyRef = useRef(false);
@@ -161,60 +202,66 @@ export default function NotificationCenter() {
 
     const channel = supabase
       .channel("admin-notifications")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "contact_messages" },
-        handle("message", "/admin/messages"),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "contact_messages" },
-        () => qc.invalidateQueries({ queryKey: ["notifications"] }),
-      )
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "reservation_leads" },
-        handle("reservation", "/admin/reservations"),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "reservation_leads" },
-        () => qc.invalidateQueries({ queryKey: ["notifications"] }),
-      )
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "orders" },
-        handle("order", "/admin/orders"),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "orders" },
-        () => qc.invalidateQueries({ queryKey: ["notifications"] }),
-      )
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "reviews" },
-        handle("review", "/admin/testimonials"),
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "reviews" },
-        () => qc.invalidateQueries({ queryKey: ["notifications"] }),
-      )
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "contact_messages" }, handle("message", "/admin/messages"))
+      .on("postgres_changes", { event: "*", schema: "public", table: "contact_messages" }, () => qc.invalidateQueries({ queryKey: ["notifications"] }))
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "reservation_leads" }, handle("reservation", "/admin/reservations"))
+      .on("postgres_changes", { event: "*", schema: "public", table: "reservation_leads" }, () => qc.invalidateQueries({ queryKey: ["notifications"] }))
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders" }, handle("order", "/admin/orders"))
+      .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => qc.invalidateQueries({ queryKey: ["notifications"] }))
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "reviews" }, handle("review", "/admin/testimonials"))
+      .on("postgres_changes", { event: "*", schema: "public", table: "reviews" }, () => qc.invalidateQueries({ queryKey: ["notifications"] }))
       .subscribe();
     return () => {
       void supabase.removeChannel(channel);
     };
   }, [qc]);
 
-  const total = useMemo(() => {
-    if (!data) return 0;
-    return (
-      data.counts.messages +
-      data.counts.reservations +
-      data.counts.orders +
-      data.counts.reviews
-    );
+  // Mark a contact message as read in the DB (best-effort) AND dismiss locally.
+  const markMessageRead = useCallback(
+    async (messageRowId: string, notifId: string) => {
+      dismiss(notifId);
+      const { error } = await supabase
+        .from("contact_messages")
+        .update({ is_read: true })
+        .eq("id", messageRowId);
+      if (error) {
+        // Roll back local dismiss so the user sees the failure.
+        setDismissed((prev) => {
+          const next = new Set(prev);
+          next.delete(notifId);
+          saveDismissed(next);
+          return next;
+        });
+        toast.error(error.message);
+        return;
+      }
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+    },
+    [dismiss, qc],
+  );
+
+  const visibleItems = useMemo(
+    () => (data?.items ?? []).filter((i) => !dismissed.has(i.id)),
+    [data, dismissed],
+  );
+  const total = visibleItems.length;
+
+  // Garbage-collect dismissed IDs that no longer appear in the live set so
+  // the localStorage entry doesn't grow forever.
+  useEffect(() => {
+    if (!data) return;
+    const live = new Set(data.items.map((i) => i.id));
+    let changed = false;
+    const next = new Set<string>();
+    dismissed.forEach((id) => {
+      if (live.has(id)) next.add(id);
+      else changed = true;
+    });
+    if (changed) {
+      setDismissed(next);
+      saveDismissed(next);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
   return (
@@ -236,48 +283,89 @@ export default function NotificationCenter() {
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className="w-80 p-0 bg-card border-border"
+        className="w-96 p-0 bg-card border-border text-foreground"
         sideOffset={8}
       >
-        <div className="p-3 border-b border-border flex items-center justify-between">
-          <span className="font-semibold text-sm text-foreground">
-            Notifications
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {total > 0 ? `${total} pending` : "All caught up"}
-          </span>
+        <div className="p-3 border-b border-border flex items-center justify-between gap-2">
+          <span className="font-semibold text-sm text-foreground">Notifications</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">
+              {total > 0 ? `${total} unread` : "All caught up"}
+            </span>
+            {total > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => dismissAll(visibleItems.map((i) => i.id))}
+                title="Mark all as read"
+              >
+                <CheckCheck className="w-3.5 h-3.5 mr-1" />
+                Mark all read
+              </Button>
+            )}
+          </div>
         </div>
 
-        {data && total > 0 ? (
+        {total > 0 ? (
           <ul className="max-h-96 overflow-y-auto divide-y divide-border">
-            {data.items.map((item) => {
+            {visibleItems.map((item) => {
               const Icon = ICONS[item.kind];
+              const rowId = item.id.replace(/^(msg|res|ord|rev)-/, "");
               return (
-                <li key={item.id}>
+                <li key={item.id} className="group relative hover:bg-accent/60 transition-colors">
                   <Link
                     to={item.href}
-                    onClick={() => setOpen(false)}
-                    className="flex gap-3 p-3 hover:bg-accent/60 transition-colors"
+                    onClick={() => {
+                      if (item.kind === "message") {
+                        void markMessageRead(rowId, item.id);
+                      } else {
+                        dismiss(item.id);
+                      }
+                      setOpen(false);
+                    }}
+                    className="flex gap-3 p-3 pr-20"
                   >
                     <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
                       <Icon className="w-4 h-4" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-foreground truncate">
-                        {item.title}
-                      </div>
-                      <div className="text-xs text-muted-foreground truncate">
-                        {item.subtitle}
-                      </div>
+                      <div className="text-sm font-medium text-foreground truncate">{item.title}</div>
+                      <div className="text-xs text-muted-foreground truncate">{item.subtitle}</div>
                       <div className="text-[10px] text-muted-foreground/70 mt-0.5">
-                        {item.createdAt
-                          ? formatDistanceToNow(new Date(item.createdAt), {
-                              addSuffix: true,
-                            })
-                          : ""}
+                        {item.createdAt ? formatDistanceToNow(new Date(item.createdAt), { addSuffix: true }) : ""}
                       </div>
                     </div>
                   </Link>
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (item.kind === "message") void markMessageRead(rowId, item.id);
+                        else dismiss(item.id);
+                      }}
+                      className="p-1.5 rounded-md hover:bg-primary/10 text-muted-foreground hover:text-primary"
+                      aria-label="Mark as read"
+                      title="Mark as read"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        dismiss(item.id);
+                      }}
+                      className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                      aria-label="Dismiss"
+                      title="Dismiss"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </li>
               );
             })}
@@ -289,34 +377,10 @@ export default function NotificationCenter() {
         )}
 
         <div className="p-2 border-t border-border grid grid-cols-4 gap-1 text-xs">
-          <Link
-            to="/admin/messages"
-            onClick={() => setOpen(false)}
-            className="text-center py-1.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground"
-          >
-            Messages
-          </Link>
-          <Link
-            to="/admin/reservations"
-            onClick={() => setOpen(false)}
-            className="text-center py-1.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground"
-          >
-            Tables
-          </Link>
-          <Link
-            to="/admin/orders"
-            onClick={() => setOpen(false)}
-            className="text-center py-1.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground"
-          >
-            Orders
-          </Link>
-          <Link
-            to="/admin/testimonials"
-            onClick={() => setOpen(false)}
-            className="text-center py-1.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground"
-          >
-            Reviews
-          </Link>
+          <Link to="/admin/messages" onClick={() => setOpen(false)} className="text-center py-1.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground">Messages</Link>
+          <Link to="/admin/reservations" onClick={() => setOpen(false)} className="text-center py-1.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground">Tables</Link>
+          <Link to="/admin/orders" onClick={() => setOpen(false)} className="text-center py-1.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground">Orders</Link>
+          <Link to="/admin/testimonials" onClick={() => setOpen(false)} className="text-center py-1.5 rounded hover:bg-accent text-muted-foreground hover:text-foreground">Reviews</Link>
         </div>
       </PopoverContent>
     </Popover>

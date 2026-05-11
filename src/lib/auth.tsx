@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, useMemo, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef, type ReactNode } from "react";
 import { type User, type Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { siteUrl } from "@/lib/site-url";
@@ -79,8 +79,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAuthenticated: false,
   });
 
-  const loadUser = useCallback(async (session: Session | null) => {
+  // Track which user id we've already linked guest orders for, so the RPC
+  // fires once per real sign-in — not on every TOKEN_REFRESHED / focus event.
+  const linkedUserIdRef = useRef<string | null>(null);
+
+  const loadUser = useCallback(async (session: Session | null, opts?: { runLinkRpc?: boolean }) => {
     if (!session?.user) {
+      linkedUserIdRef.current = null;
       setSentryUser(null);
       setState({ user: null, session: null, loading: false, isAuthenticated: false });
       return;
@@ -89,9 +94,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const adminUser = await buildAdminUser(session.user);
       setSentryUser({ id: adminUser.id, email: adminUser.email });
       setState({ user: adminUser, session, loading: false, isAuthenticated: true });
-      // Backfill any past guest orders that match this user's verified email.
-      // Safe to call repeatedly — RPC is idempotent and returns 0 when nothing matches.
-      void (supabase.rpc as any)("link_orders_to_current_user").then(() => {}, () => {});
+      // Backfill past guest orders only on real sign-in, and only once per
+      // user id per page session — not on every token refresh.
+      if (opts?.runLinkRpc && linkedUserIdRef.current !== adminUser.id) {
+        linkedUserIdRef.current = adminUser.id;
+        void (supabase.rpc as any)("link_orders_to_current_user").then(() => {}, () => {});
+      }
     } catch {
       setSentryUser(null);
       setState({ user: null, session: null, loading: false, isAuthenticated: false });
@@ -99,14 +107,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // Listen for auth changes FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      loadUser(session);
-    });
-
-    // Then get current session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      loadUser(session);
+    // onAuthStateChange fires an INITIAL_SESSION event on subscribe, so we
+    // don't need a separate getSession() call — that was causing loadUser to
+    // run twice on every page load.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // Only run the guest-order-link RPC on actual sign-in events.
+      const runLinkRpc = event === "SIGNED_IN" || event === "INITIAL_SESSION";
+      loadUser(session, { runLinkRpc });
     });
 
     return () => subscription.unsubscribe();

@@ -1,15 +1,15 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod/v3";
-import { CheckCircle, Calendar, Clock, Users, Phone, Smartphone, Loader2, X } from "lucide-react";
+import { CheckCircle, Calendar, Clock, Users, Phone, Smartphone, Loader2, X, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { toast } from "sonner";
 import { useSettings, useCreateReservation } from "@/lib/supabase-hooks";
-import { useInitiateMpesaPayment, usePaymentStatus } from "@/lib/payments";
+import { useInitiateMpesaPayment, usePaymentStatus, useClaimManualPayment } from "@/lib/payments";
 import PublicLayout from "@/components/public/PublicLayout";
 
 const schema = z.object({
@@ -37,12 +37,17 @@ export default function ReservationsPage() {
   const [depositPaid, setDepositPaid] = useState(false);
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [paymentOpen, setPaymentOpen] = useState(false);
+  const [paymentTimedOut, setPaymentTimedOut] = useState(false);
+  const [manualRef, setManualRef] = useState("");
+  const [manualSubmitted, setManualSubmitted] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { data: settings } = useSettings();
   const depositAmount = Math.max(0, parseInt(settings?.reservation_deposit_amount ?? "0", 10) || 0);
 
   const initiatePayment = useInitiateMpesaPayment();
-  const { data: paymentRow } = usePaymentStatus(paymentId);
+  const { data: paymentRow, refetch: refetchPayment } = usePaymentStatus(paymentId);
+  const claimManual = useClaimManualPayment();
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -51,6 +56,18 @@ export default function ReservationsPage() {
 
   const createMutation = useCreateReservation();
 
+  // Surface a timeout if the M-Pesa callback hasn't arrived in ~120s so the
+  // user can retry the STK push or submit a manual reference, without ever
+  // creating a duplicate reservation (we keep the same reservationId).
+  useEffect(() => {
+    if (!paymentId) return;
+    if (paymentRow && paymentRow.status !== "pending") return;
+    setPaymentTimedOut(false);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => setPaymentTimedOut(true), 120_000);
+    return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current); };
+  }, [paymentId, paymentRow?.status]);
+
   // React to payment state changes
   useEffect(() => {
     if (!paymentRow) return;
@@ -58,11 +75,24 @@ export default function ReservationsPage() {
       toast.success(`Deposit received${paymentRow.mpesa_receipt_number ? ` (${paymentRow.mpesa_receipt_number})` : ""}!`);
       setDepositPaid(true);
       setPaymentOpen(false);
+      setPaymentId(null);
+      setPaymentTimedOut(false);
     } else if (paymentRow.status === "failed" || paymentRow.status === "cancelled" || paymentRow.status === "timeout") {
       toast.error(paymentRow.result_desc ?? `Payment ${paymentRow.status}. Please try again.`);
     }
+    if (paymentRow.manual_claim_status === "rejected") {
+      toast.error(
+        paymentRow.manual_notes
+          ? `Reference rejected: ${paymentRow.manual_notes}`
+          : "Admin couldn't verify your M-Pesa reference. Please retry payment.",
+      );
+      setManualSubmitted(false);
+      setManualRef("");
+      setPaymentTimedOut(true);
+      setPaymentOpen(true);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paymentRow?.status]);
+  }, [paymentRow?.status, paymentRow?.manual_claim_status]);
 
   const onSubmit = (data: FormData) => {
     createMutation.mutate(
@@ -92,6 +122,12 @@ export default function ReservationsPage() {
 
   const handlePayDeposit = () => {
     if (!reservationId || !submittedData || depositAmount <= 0) return;
+    // Reset transient retry state — we re-use the same reservationId so no
+    // duplicate reservation is created on subsequent attempts.
+    setPaymentTimedOut(false);
+    setManualRef("");
+    setManualSubmitted(false);
+    setPaymentId(null);
     initiatePayment.mutate(
       { reservationId, phone: submittedData.phone, amount: depositAmount },
       {
@@ -167,18 +203,84 @@ export default function ReservationsPage() {
                       ? `We've received your KES ${depositAmount.toLocaleString()} deposit. Your booking is confirmed — see you soon!`
                       : `Pay a KES ${depositAmount.toLocaleString()} deposit via M-Pesa to lock your slot. We'll send an STK Push prompt to ${submittedData.phone}.`}
                   </p>
-                  {!depositPaid && (
-                    <Button
-                      onClick={handlePayDeposit}
-                      disabled={isPaying}
-                      className="bg-primary text-primary-foreground hover:bg-primary/90 w-full sm:w-auto"
-                    >
-                      {isPaying ? (
-                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Awaiting payment…</>
-                      ) : (
-                        <><Smartphone className="w-4 h-4 mr-2" />Pay KES {depositAmount.toLocaleString()} Deposit</>
+                  {!depositPaid && !paymentTimedOut && (
+                    <div className="space-y-2">
+                      <Button
+                        onClick={handlePayDeposit}
+                        disabled={isPaying}
+                        className="bg-primary text-primary-foreground hover:bg-primary/90 w-full sm:w-auto"
+                      >
+                        {isPaying ? (
+                          <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Awaiting payment…</>
+                        ) : (
+                          <><Smartphone className="w-4 h-4 mr-2" />Pay KES {depositAmount.toLocaleString()} Deposit</>
+                        )}
+                      </Button>
+                      {paymentId && paymentRow?.status === "pending" && (
+                        <button
+                          type="button"
+                          onClick={() => refetchPayment()}
+                          className="text-xs text-primary hover:underline block"
+                        >
+                          I've paid — check status now
+                        </button>
                       )}
-                    </Button>
+                    </div>
+                  )}
+
+                  {!depositPaid && paymentTimedOut && (
+                    <div className="space-y-3 mt-2">
+                      <p className="text-amber-400 text-sm">
+                        We didn't receive a confirmation from M-Pesa. If you completed payment, enter the reference code from the SMS so admin can verify it. Otherwise, retry the prompt — your reservation is preserved either way.
+                      </p>
+
+                      <div className="space-y-2 rounded-lg border border-border bg-background/40 p-3">
+                        <label className="text-xs font-medium text-foreground/70 block">
+                          M-Pesa reference code
+                        </label>
+                        <Input
+                          value={manualRef}
+                          onChange={(e) => setManualRef(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 20))}
+                          placeholder="e.g. QGH7X8Y9ZA"
+                          maxLength={20}
+                          className="font-mono uppercase"
+                          disabled={claimManual.isPending || manualSubmitted}
+                        />
+                        <Button
+                          size="sm"
+                          className="w-full"
+                          disabled={!paymentId || manualRef.length < 8 || claimManual.isPending || manualSubmitted}
+                          onClick={() => {
+                            if (!paymentId) return;
+                            claimManual.mutate(
+                              { paymentId, reference: manualRef },
+                              {
+                                onSuccess: () => {
+                                  setManualSubmitted(true);
+                                  toast.success("Reference submitted — admin will verify shortly.");
+                                  setPaymentTimedOut(false);
+                                  setPaymentOpen(false);
+                                },
+                                onError: (e) => toast.error(e.message ?? "Failed to submit reference"),
+                              },
+                            );
+                          }}
+                        >
+                          {claimManual.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Check className="w-4 h-4 mr-2" />}
+                          Submit reference for verification
+                        </Button>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <Button variant="outline" onClick={() => { setPaymentTimedOut(false); refetchPayment(); }} className="flex-1">
+                          Check status
+                        </Button>
+                        <Button variant="outline" onClick={handlePayDeposit} disabled={initiatePayment.isPending} className="flex-1">
+                          {initiatePayment.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Smartphone className="w-4 h-4 mr-2" />}
+                          Retry STK push
+                        </Button>
+                      </div>
+                    </div>
                   )}
                 </div>
               )}

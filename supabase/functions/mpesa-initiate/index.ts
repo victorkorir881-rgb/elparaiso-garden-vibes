@@ -158,6 +158,39 @@ Deno.serve((req) => withTimedLog("mpesa-initiate", async () => {
       paymentInsert = { reservation_id: res.id };
     }
 
+    // ── Idempotency guard ────────────────────────────────────────────────
+    // If the same target already has a pending M-Pesa payment for the same
+    // phone+amount within the last 60s, reuse it instead of firing another
+    // STK push. Prevents duplicate prompts and duplicate `payments` rows
+    // when the customer double-clicks "Pay" or the network retries.
+    const targetCol = hasOrder ? "order_id" : "reservation_id";
+    const targetVal = (hasOrder ? orderId : reservationId) as string;
+    const sixtySecondsAgo = new Date(Date.now() - 60_000).toISOString();
+    const { data: existing } = await supabase
+      .from("payments")
+      .select("id, checkout_request_id")
+      .eq(targetCol, targetVal)
+      .eq("provider", "mpesa")
+      .eq("status", "pending")
+      .eq("amount", amt)
+      .eq("phone", normPhone)
+      .gte("created_at", sixtySecondsAgo)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existing?.id) {
+      logger.info("mpesa-initiate idempotent reuse", {
+        payment_id: existing.id,
+        target: targetCol,
+      });
+      return json({
+        paymentId: existing.id,
+        checkoutRequestId: existing.checkout_request_id ?? "",
+        message: "Payment already in progress — check your phone for the M-Pesa prompt",
+      });
+    }
+
     // Get OAuth token
     const { token, base } = await getAccessToken(
       env,

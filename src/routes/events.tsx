@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import EventsPage from "@/pages/public/EventsPage";
 import { OG_IMAGES } from "@/lib/og-images";
 import { siteUrl } from "@/lib/site-url";
+import { prefetchEvents } from "@/lib/route-prefetch";
 
 export const Route = createFileRoute("/events")({
   head: () => ({
@@ -15,5 +16,6 @@ export const Route = createFileRoute("/events")({
     ],
     links: [{ rel: "canonical", href: siteUrl("/events") }],
   }),
+  loader: () => { prefetchEvents(); },
   component: EventsPage,
 });

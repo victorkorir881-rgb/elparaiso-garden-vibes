@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth";
 import { useUnreadMessageCount } from "@/lib/supabase-hooks";
+import { useRealtimeAdminSync } from "@/lib/use-realtime-admin-sync";
 import { toast } from "sonner";
 import NotificationCenter from "./NotificationCenter";
 import AdminInstallButton from "./AdminInstallButton";
@@ -61,6 +62,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const { user, loading, isAuthenticated, signOut } = useAuth();
 
   const { data: unreadCount } = useUnreadMessageCount();
+  useRealtimeAdminSync();
 
   useEffect(() => {
     if (!loading && !isAuthenticated) navigate({ to: "/admin/login" });
@@ -208,9 +210,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   );
 
   return (
-    <div className="admin-shell min-h-screen bg-background flex">
+    <div className="admin-shell h-screen overflow-hidden bg-background flex">
       <aside
-        className="hidden lg:flex w-64 flex-col border-r border-border/60 shrink-0"
+        className="hidden lg:flex w-64 flex-col border-r border-border/60 shrink-0 h-screen sticky top-0"
         style={{ background: "var(--gradient-surface)" }}
       >
         {sidebarContent}
@@ -233,7 +235,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       )}
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
         <header className="h-16 border-b border-border/60 bg-card/50 backdrop-blur-md flex items-center justify-between gap-4 px-4 md:px-6 shrink-0 sticky top-0 z-30">
           <div className="flex items-center gap-3 min-w-0">
             <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setSidebarOpen(true)}>

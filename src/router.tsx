@@ -38,10 +38,18 @@ export const queryClient = new QueryClient({
 export function createRouter() {
   const router = createTanStackRouter({
     routeTree,
-    // preload route code on link hover/intent so the page swaps instantly
-    defaultPreload: "intent",
+    // preload route chunks + data the moment a link enters the viewport so
+    // tapping it on mobile (no hover) is instant. `intent` only fires on
+    // hover/focus, which leaves a perceptible delay on touch devices.
+    defaultPreload: "viewport",
+    // fire preload immediately rather than after the default 50ms delay.
+    defaultPreloadDelay: 0,
     // keep preloaded data warm for 60s so the click after preload is instant
     defaultPreloadStaleTime: 60 * 1000,
+    // bypass loaders that already have fresh data — avoids the "stuck on
+    // pending" feel when revisiting a page within its staleTime window.
+    defaultPendingMs: 0,
+    defaultPendingMinMs: 0,
     // always start a new page scrolled to top — no flash of scrolled-down content
     scrollRestoration: true,
     scrollRestorationBehavior: "instant",

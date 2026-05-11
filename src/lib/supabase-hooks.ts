@@ -580,7 +580,14 @@ export function useOrderStats() {
   return useQuery({
     queryKey: ["orderStats"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("orders").select("status").neq("payment_status", "pending");
+      // Only count orders that have completed payment. Unpaid/pending-payment
+      // rows are NOT surfaced to the admin panel — they only appear after the
+      // M-Pesa callback (or a verified manual claim) flips payment_status to
+      // anything other than "pending".
+      const { data, error } = await supabase
+        .from("orders")
+        .select("status")
+        .neq("payment_status", "pending");
       if (error) throw error;
       const all = data ?? [];
       return {

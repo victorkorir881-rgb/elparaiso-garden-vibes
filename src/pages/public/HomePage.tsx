@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useSettings, useMenuItems, useReviews, useEvents, useGalleryImages } from "@/lib/supabase-hooks";
 import PublicLayout from "@/components/public/PublicLayout";
-import TestimonialsCarousel from "@/components/TestimonialsCarousel";
+
 import { MenuItemImage } from "@/components/MenuItemImage";
 import { ScrollReveal } from "@/hooks/useScrollAnimation";
 
@@ -234,7 +234,7 @@ export default function HomePage() {
         </section>
       )}
 
-      <TestimonialsCarousel />
+      
 
       {/* ── EVENTS PREVIEW ── */}
       {events && events.length > 0 && (

@@ -23,6 +23,17 @@ function fmtDay(d: Date) {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+// Local-time YYYY-MM-DD key. Using toISOString() drops orders that fall on a
+// different UTC day from the local one (in EAT/UTC+3 anything 00:00–02:59 local
+// rolls back a day) — they'd vanish from the chart even though they're counted
+// in the totals.
+function localDayKey(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 const KSH = new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES", maximumFractionDigits: 0 });
 
 export default function AdminAnalytics() {
@@ -52,12 +63,10 @@ export default function AdminAnalytics() {
     for (let i = 0; i < range; i++) {
       const d = new Date(since);
       d.setDate(since.getDate() + i);
-      const key = d.toISOString().slice(0, 10);
-      map.set(key, { date: fmtDay(d), orders: 0, revenue: 0, reservations: 0 });
+      map.set(localDayKey(d), { date: fmtDay(d), orders: 0, revenue: 0, reservations: 0 });
     }
     for (const o of filteredOrders) {
-      const key = new Date(o.created_at).toISOString().slice(0, 10);
-      const row = map.get(key);
+      const row = map.get(localDayKey(new Date(o.created_at)));
       if (!row) continue;
       row.orders += 1;
       if (o.payment_status === "paid" || o.status === "completed") {
@@ -65,8 +74,7 @@ export default function AdminAnalytics() {
       }
     }
     for (const r of filteredRes) {
-      const key = new Date(r.created_at).toISOString().slice(0, 10);
-      const row = map.get(key);
+      const row = map.get(localDayKey(new Date(r.created_at)));
       if (row) row.reservations += 1;
     }
     return Array.from(map.values());
@@ -100,7 +108,12 @@ export default function AdminAnalytics() {
 
   const totalOrders = filteredOrders.length;
   const totalRevenue = daily.reduce((s, d) => s + d.revenue, 0);
-  const aov = totalOrders ? totalRevenue / totalOrders : 0;
+  // AOV must divide paid revenue by paid order count, NOT by total orders.
+  // Otherwise unpaid orders dilute the average down to a tiny number.
+  const paidOrdersCount = filteredOrders.filter(
+    (o) => o.payment_status === "paid" || o.status === "completed",
+  ).length;
+  const aov = paidOrdersCount ? totalRevenue / paidOrdersCount : 0;
   const totalRes = filteredRes.length;
   const confirmedRes = filteredRes.filter((r) => r.status === "confirmed" || r.status === "completed").length;
   const conversionRate = totalRes ? (confirmedRes / totalRes) * 100 : 0;
@@ -184,13 +197,13 @@ export default function AdminAnalytics() {
         <div className="h-72">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={daily}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-              <YAxis yAxisId="left" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-              <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-              <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
-              <Legend />
-              <Line yAxisId="left" type="monotone" dataKey="orders" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="date" stroke="var(--muted-foreground)" fontSize={11} />
+              <YAxis yAxisId="left" stroke="var(--muted-foreground)" fontSize={11} />
+              <YAxis yAxisId="right" orientation="right" stroke="var(--muted-foreground)" fontSize={11} />
+              <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--foreground)" }} />
+              <Legend wrapperStyle={{ color: "var(--foreground)" }} />
+              <Line yAxisId="left" type="monotone" dataKey="orders" stroke="var(--primary)" strokeWidth={2} dot={false} />
               <Line yAxisId="right" type="monotone" dataKey="revenue" stroke="#22c55e" strokeWidth={2} dot={false} />
             </LineChart>
           </ResponsiveContainer>
@@ -206,11 +219,11 @@ export default function AdminAnalytics() {
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={topItems} layout="vertical" margin={{ left: 24 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                  <YAxis type="category" dataKey="name" stroke="hsl(var(--muted-foreground))" fontSize={11} width={120} />
-                  <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
-                  <Bar dataKey="qty" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis type="number" stroke="var(--muted-foreground)" fontSize={11} />
+                  <YAxis type="category" dataKey="name" stroke="var(--muted-foreground)" fontSize={11} width={120} />
+                  <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--foreground)" }} />
+                  <Bar dataKey="qty" fill="var(--primary)" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -222,12 +235,12 @@ export default function AdminAnalytics() {
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={peakHours}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="hour" stroke="hsl(var(--muted-foreground))" fontSize={10} interval={1} />
-                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8 }} />
-                <Legend />
-                <Bar dataKey="orders" stackId="a" fill="hsl(var(--primary))" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="hour" stroke="var(--muted-foreground)" fontSize={10} interval={1} />
+                <YAxis stroke="var(--muted-foreground)" fontSize={11} />
+                <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--foreground)" }} />
+                <Legend wrapperStyle={{ color: "var(--foreground)" }} />
+                <Bar dataKey="orders" stackId="a" fill="var(--primary)" />
                 <Bar dataKey="reservations" stackId="a" fill="#a78bfa" />
               </BarChart>
             </ResponsiveContainer>

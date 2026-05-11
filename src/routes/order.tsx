@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import OrderPage from "@/pages/public/OrderPage";
 import { OG_IMAGES } from "@/lib/og-images";
 import { siteUrl } from "@/lib/site-url";
+import { prefetchMenu, prefetchSettings } from "@/lib/route-prefetch";
 
 export const Route = createFileRoute("/order")({
   head: () => ({
@@ -15,5 +16,6 @@ export const Route = createFileRoute("/order")({
     ],
     links: [{ rel: "canonical", href: siteUrl("/order") }],
   }),
+  loader: () => { prefetchSettings(); prefetchMenu(); },
   component: OrderPage,
 });

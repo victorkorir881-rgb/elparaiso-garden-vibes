@@ -147,24 +147,32 @@ export function usePaymentStatus(paymentId: string | null, intervalMs = 3000) {
     },
     queryFn: async () => {
       if (!paymentId) return null;
-      const cols =
-        "id, status, result_desc, mpesa_receipt_number, manual_claim_status, manual_reference, manual_notes, manual_verified_at";
       const sb = supabase as any;
-      let { data, error } = await sb
+      // Core fields are always available on payments_public (since 0018) and
+      // are the only ones strictly needed to drive the success/failed UI.
+      // Selecting them alone keeps polling working even if a later migration
+      // (0024) that adds manual_claim_* to the view hasn't been applied yet.
+      const coreCols = "id, status, result_desc, mpesa_receipt_number";
+      const core = await sb
         .from("payments_public")
-        .select(cols)
+        .select(coreCols)
         .eq("id", paymentId)
         .maybeSingle();
-      if (error) {
-        const fallback = await sb
-          .from("payments")
-          .select(cols)
-          .eq("id", paymentId)
-          .maybeSingle();
-        if (fallback.error) throw fallback.error;
-        data = fallback.data;
-      }
-      return (data as PaymentRow | null) ?? null;
+      if (core.error) throw core.error;
+      if (!core.data) return null;
+
+      // Best-effort: enrich with manual-claim fields. If the view/grants
+      // don't expose them yet, silently skip — the success path doesn't
+      // depend on these.
+      let manual: Partial<PaymentRow> = {};
+      const manualRes = await sb
+        .from("payments_public")
+        .select("manual_claim_status, manual_reference, manual_notes, manual_verified_at")
+        .eq("id", paymentId)
+        .maybeSingle();
+      if (!manualRes.error && manualRes.data) manual = manualRes.data;
+
+      return { ...(core.data as PaymentRow), ...manual } as PaymentRow;
     },
   });
 

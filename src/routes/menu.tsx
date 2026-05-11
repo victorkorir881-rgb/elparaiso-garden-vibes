@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import MenuPage from "@/pages/public/MenuPage";
 import { OG_IMAGES } from "@/lib/og-images";
 import { siteUrl } from "@/lib/site-url";
+import { prefetchMenu } from "@/lib/route-prefetch";
 
 const menuJsonLd = {
   "@context": "https://schema.org",
@@ -30,5 +31,6 @@ export const Route = createFileRoute("/menu")({
       },
     ],
   }),
+  loader: () => { prefetchMenu(); },
   component: MenuPage,
 });

@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import ContactPage from "@/pages/public/ContactPage";
 import { OG_IMAGES } from "@/lib/og-images";
 import { siteUrl } from "@/lib/site-url";
+import { prefetchSettings } from "@/lib/route-prefetch";
 
 const contactJsonLd = {
   "@context": "https://schema.org",
@@ -35,5 +36,6 @@ export const Route = createFileRoute("/contact")({
       },
     ],
   }),
+  loader: () => { prefetchSettings(); },
   component: ContactPage,
 });

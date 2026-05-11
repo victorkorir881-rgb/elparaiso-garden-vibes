@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import ReservationsPage from "@/pages/public/ReservationsPage";
 import { OG_IMAGES } from "@/lib/og-images";
 import { siteUrl } from "@/lib/site-url";
+import { prefetchSettings } from "@/lib/route-prefetch";
 
 export const Route = createFileRoute("/reservations")({
   head: () => ({
@@ -15,5 +16,6 @@ export const Route = createFileRoute("/reservations")({
     ],
     links: [{ rel: "canonical", href: siteUrl("/reservations") }],
   }),
+  loader: () => { prefetchSettings(); },
   component: ReservationsPage,
 });

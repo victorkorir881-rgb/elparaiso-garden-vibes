@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import HomePage from "@/pages/public/HomePage";
 import { OG_IMAGES } from "@/lib/og-images";
 import { siteUrl } from "@/lib/site-url";
+import { prefetchHome } from "@/lib/route-prefetch";
 
 const restaurantJsonLd = {
   "@context": "https://schema.org",
@@ -40,5 +41,6 @@ export const Route = createFileRoute("/")({
       },
     ],
   }),
+  loader: () => { prefetchHome(); },
   component: HomePage,
 });

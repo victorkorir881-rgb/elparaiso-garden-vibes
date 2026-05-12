@@ -18,7 +18,8 @@ type TemplateName =
   | "reservation_confirmation"
   | "order_confirmation"
   | "order_status_update"
-  | "order_payment_receipt";
+  | "order_payment_receipt"
+  | "admin_new_order";
 
 interface RequestBody {
   template: TemplateName;
@@ -68,6 +69,12 @@ function renderOrderPaymentReceipt(o: any, p: any): string {
   const amtStr = amt != null ? ` KSh ${Number(amt).toLocaleString()}` : "";
   const rcpt = p?.mpesa_receipt_number ? ` Receipt: ${p.mpesa_receipt_number}.` : "";
   return `Asante ${o.customer_name ?? ""}! Payment${amtStr} for order ${o.order_number} received.${rcpt} Order is now confirmed. — Elparaiso Garden Kisii`.trim();
+}
+
+function renderAdminNewOrder(o: any): string {
+  const total = o.total_amount != null ? ` KSh ${Number(o.total_amount).toLocaleString()}` : "";
+  const type = o.order_type ? ` (${o.order_type})` : "";
+  return `New PAID order ${o.order_number}${type}${total} from ${o.customer_name ?? "customer"} ${o.customer_phone ?? ""}. Open admin panel. — Elparaiso`.trim();
 }
 
 /** 
@@ -167,6 +174,78 @@ Deno.serve(async (req) => {
         .maybeSingle();
       phone = normalizeKePhone(pay?.phone ?? data.customer_phone);
       message = renderOrderPaymentReceipt(data, pay);
+    } else if (body.template === "admin_new_order") {
+      const { data, error } = await admin.from("orders").select("*").eq("id", body.recordId).single();
+      if (error || !data) return new Response(JSON.stringify({ error: "record_not_found" }), { status: 404, headers: { ...corsHeaders, "content-type": "application/json" } });
+
+      // Prefer phones of admins currently on-duty (set in admin profile).
+      // Fall back to ADMIN_NOTIFY_PHONES env var if no on-duty admin.
+      const { data: onDutyAdmins } = await admin
+        .from("admin_profiles")
+        .select("phone")
+        .eq("is_active", true)
+        .eq("on_duty", true)
+        .not("phone", "is", null);
+
+      let adminPhones = (onDutyAdmins ?? [])
+        .map((r: { phone: string | null }) => normalizeKePhone(r.phone ?? ""))
+        .filter((p): p is string => !!p);
+
+      if (adminPhones.length === 0) {
+        const adminPhonesRaw = Deno.env.get("ADMIN_NOTIFY_PHONES") ?? "";
+        adminPhones = adminPhonesRaw
+          .split(",")
+          .map((p) => normalizeKePhone(p.trim()))
+          .filter((p): p is string => !!p);
+      }
+
+      if (adminPhones.length === 0) {
+        return new Response(JSON.stringify({ skipped: "no_admin_phones" }), { status: 200, headers: { ...corsHeaders, "content-type": "application/json" } });
+      }
+
+      const idemKey = `admin_new_order:${body.recordId}:`;
+      if (await recentlySent(admin, idemKey)) {
+        return new Response(JSON.stringify({ skipped: "duplicate" }), { status: 200, headers: { ...corsHeaders, "content-type": "application/json" } });
+      }
+
+      const adminMessage = renderAdminNewOrder(data);
+      const endpoint = AT_ENV === "production" ? LIVE_ENDPOINT : SANDBOX_ENDPOINT;
+      const form = new URLSearchParams();
+      form.set("username", AT_USERNAME);
+      form.set("to", adminPhones.join(","));
+      form.set("message", adminMessage);
+      if (AT_SENDER_ID) form.set("from", AT_SENDER_ID);
+
+      let providerJson: any = null;
+      let providerOk = false;
+      try {
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "apiKey": AT_API_KEY,
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
+          },
+          body: form.toString(),
+        });
+        providerJson = await res.json().catch(() => ({}));
+        const recipients = providerJson?.SMSMessageData?.Recipients ?? [];
+        providerOk = res.ok && recipients.some((r: any) => r?.status === "Success");
+      } catch (e) {
+        await logSend(admin, { idempotency_key: idemKey, template: body.template, record_id: body.recordId, phone: adminPhones.join(","), status: "failed", error: (e as Error).message });
+        return new Response(JSON.stringify({ error: "provider_unreachable" }), { status: 502, headers: { ...corsHeaders, "content-type": "application/json" } });
+      }
+
+      await logSend(admin, {
+        idempotency_key: idemKey,
+        template: body.template,
+        record_id: body.recordId,
+        phone: adminPhones.join(","),
+        status: providerOk ? "sent" : "failed",
+        provider_response: providerJson,
+      });
+
+      return new Response(JSON.stringify({ ok: providerOk, to: adminPhones }), { status: providerOk ? 200 : 502, headers: { ...corsHeaders, "content-type": "application/json" } });
     }
 
     if (!phone) {

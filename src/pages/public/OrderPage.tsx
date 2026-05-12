@@ -302,7 +302,7 @@ export default function OrderPage() {
   ];
 
   const orderTypeOptions: { id: typeof orderType; label: string; icon: any; desc: string }[] = [
-    { id: "delivery", label: "Delivery", icon: Truck, desc: "To your door" },
+    { id: "delivery", label: "Delivery", icon: Truck, desc: "Our riders bring it to you" },
     { id: "takeaway", label: "Takeaway", icon: Store, desc: "Pick up ready" },
     { id: "dine-in", label: "Dine in", icon: Utensils, desc: "Eat with us" },
   ];
@@ -398,6 +398,12 @@ export default function OrderPage() {
                         );
                       })}
                     </div>
+                    {orderType === "delivery" && (
+                      <p className="mt-3 text-xs text-muted-foreground flex items-start gap-1.5">
+                        <Truck className="w-3.5 h-3.5 mt-0.5 text-primary shrink-0" />
+                        Elparaiso handles delivery in-house — our own riders will bring your order. A flat delivery fee of KES {adminDeliveryFee.toLocaleString()} applies.
+                      </p>
+                    )}
                   </Card>
 
                   {/* Customer details */}

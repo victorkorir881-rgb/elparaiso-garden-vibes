@@ -31,6 +31,7 @@ import { Route as AdminTestimonialsRouteImport } from './routes/admin/testimonia
 import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
 import { Route as AdminSeoRouteImport } from './routes/admin/seo'
 import { Route as AdminReservationsRouteImport } from './routes/admin/reservations'
+import { Route as AdminProfileRouteImport } from './routes/admin/profile'
 import { Route as AdminOrdersRouteImport } from './routes/admin/orders'
 import { Route as AdminMessagesRouteImport } from './routes/admin/messages'
 import { Route as AdminMenuRouteImport } from './routes/admin/menu'
@@ -152,6 +153,11 @@ const AdminReservationsRoute = AdminReservationsRouteImport.update({
   path: '/reservations',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminProfileRoute = AdminProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminOrdersRoute = AdminOrdersRouteImport.update({
   id: '/orders',
   path: '/orders',
@@ -230,6 +236,7 @@ export interface FileRoutesByFullPath {
   '/admin/menu': typeof AdminMenuRoute
   '/admin/messages': typeof AdminMessagesRoute
   '/admin/orders': typeof AdminOrdersRoute
+  '/admin/profile': typeof AdminProfileRoute
   '/admin/reservations': typeof AdminReservationsRoute
   '/admin/seo': typeof AdminSeoRoute
   '/admin/settings': typeof AdminSettingsRoute
@@ -263,6 +270,7 @@ export interface FileRoutesByTo {
   '/admin/menu': typeof AdminMenuRoute
   '/admin/messages': typeof AdminMessagesRoute
   '/admin/orders': typeof AdminOrdersRoute
+  '/admin/profile': typeof AdminProfileRoute
   '/admin/reservations': typeof AdminReservationsRoute
   '/admin/seo': typeof AdminSeoRoute
   '/admin/settings': typeof AdminSettingsRoute
@@ -298,6 +306,7 @@ export interface FileRoutesById {
   '/admin/menu': typeof AdminMenuRoute
   '/admin/messages': typeof AdminMessagesRoute
   '/admin/orders': typeof AdminOrdersRoute
+  '/admin/profile': typeof AdminProfileRoute
   '/admin/reservations': typeof AdminReservationsRoute
   '/admin/seo': typeof AdminSeoRoute
   '/admin/settings': typeof AdminSettingsRoute
@@ -334,6 +343,7 @@ export interface FileRouteTypes {
     | '/admin/menu'
     | '/admin/messages'
     | '/admin/orders'
+    | '/admin/profile'
     | '/admin/reservations'
     | '/admin/seo'
     | '/admin/settings'
@@ -367,6 +377,7 @@ export interface FileRouteTypes {
     | '/admin/menu'
     | '/admin/messages'
     | '/admin/orders'
+    | '/admin/profile'
     | '/admin/reservations'
     | '/admin/seo'
     | '/admin/settings'
@@ -401,6 +412,7 @@ export interface FileRouteTypes {
     | '/admin/menu'
     | '/admin/messages'
     | '/admin/orders'
+    | '/admin/profile'
     | '/admin/reservations'
     | '/admin/seo'
     | '/admin/settings'
@@ -584,6 +596,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminReservationsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/profile': {
+      id: '/admin/profile'
+      path: '/profile'
+      fullPath: '/admin/profile'
+      preLoaderRoute: typeof AdminProfileRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/orders': {
       id: '/admin/orders'
       path: '/orders'
@@ -668,6 +687,7 @@ interface AdminRouteChildren {
   AdminMenuRoute: typeof AdminMenuRoute
   AdminMessagesRoute: typeof AdminMessagesRoute
   AdminOrdersRoute: typeof AdminOrdersRoute
+  AdminProfileRoute: typeof AdminProfileRoute
   AdminReservationsRoute: typeof AdminReservationsRoute
   AdminSeoRoute: typeof AdminSeoRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
@@ -687,6 +707,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminMenuRoute: AdminMenuRoute,
   AdminMessagesRoute: AdminMessagesRoute,
   AdminOrdersRoute: AdminOrdersRoute,
+  AdminProfileRoute: AdminProfileRoute,
   AdminReservationsRoute: AdminReservationsRoute,
   AdminSeoRoute: AdminSeoRoute,
   AdminSettingsRoute: AdminSettingsRoute,

@@ -35,13 +35,16 @@ const STATUS_RANK: Record<string, number> = {
 const statusOptions = ["pending", "preparing", "ready", "out-for-delivery", "completed", "cancelled"];
 const orderTypeOptions = ["dine-in", "takeaway", "delivery"];
 
-// Mirrors sql/0006_order_state_machine.sql exactly. The DB rejects any
-// transition outside this graph, so the UI must only offer valid next steps.
+// Mirrors sql/0030_order_state_machine_relaxed.sql. Admins may jump to any
+// non-terminal status from any active state. Terminal states (completed,
+// cancelled) cannot transition further. Completing an unpaid order is still
+// blocked at the DB layer.
+const NON_TERMINAL: string[] = ["pending", "preparing", "ready", "out-for-delivery", "completed", "cancelled"];
 const ALLOWED_NEXT: Record<string, string[]> = {
-  pending: ["preparing", "cancelled"],
-  preparing: ["ready", "cancelled"],
-  ready: ["out-for-delivery", "completed", "cancelled"],
-  "out-for-delivery": ["completed", "cancelled"],
+  pending: NON_TERMINAL.filter((s) => s !== "pending"),
+  preparing: NON_TERMINAL.filter((s) => s !== "preparing"),
+  ready: NON_TERMINAL.filter((s) => s !== "ready"),
+  "out-for-delivery": NON_TERMINAL.filter((s) => s !== "out-for-delivery"),
   completed: [],
   cancelled: [],
 };

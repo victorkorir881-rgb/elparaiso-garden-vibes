@@ -4,7 +4,7 @@ import {
   LayoutDashboard, UtensilsCrossed, CalendarCheck, PartyPopper,
   Images, MessageSquare, Settings, Search, Users, Menu, X,
   LogOut, Star, Package, Sliders, ScrollText, BarChart3,
-  ExternalLink, ChevronDown,
+  ExternalLink, ChevronDown, UserCog,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -214,7 +214,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             className="absolute bottom-full left-3 right-3 mb-2 rounded-xl border border-border/60 overflow-hidden"
             style={{ background: "var(--gradient-surface)", boxShadow: "var(--shadow-elegant)" }}
           >
-            <Link to="/" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2 px-3 py-2.5 text-sm text-foreground hover:bg-accent/50 transition-colors">
+            <Link to="/admin/profile" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2 px-3 py-2.5 text-sm text-foreground hover:bg-accent/50 transition-colors">
+              <UserCog className="w-4 h-4" /> My profile
+            </Link>
+            <Link to="/" onClick={() => setUserMenuOpen(false)} className="flex items-center gap-2 px-3 py-2.5 text-sm text-foreground hover:bg-accent/50 transition-colors border-t border-border/60">
               <ExternalLink className="w-4 h-4" /> View site
             </Link>
             <button

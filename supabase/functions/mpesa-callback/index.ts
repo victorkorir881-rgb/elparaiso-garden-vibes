@@ -96,6 +96,19 @@ Deno.serve((req) => withTimedLog("mpesa-callback", async () => {
       })
       .eq("id", payment.id);
 
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const invoke = (fn: string, body: Record<string, unknown>) =>
+      fetch(`${supabaseUrl}/functions/v1/${fn}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${serviceKey}`,
+          "apikey": serviceKey,
+        },
+        body: JSON.stringify(body),
+      }).catch((e) => console.warn(`mpesa-callback: ${fn} invoke failed`, e));
+
     if (newStatus === "success") {
       if (payment.order_id) {
         // ── ORDER PAYMENT ─────────────────────────────────────────────────
@@ -119,29 +132,15 @@ Deno.serve((req) => withTimedLog("mpesa-callback", async () => {
           // Fire-and-forget receipt notifications. The send-email and send-sms
           // functions have their own 5-minute idempotency window, so retries
           // by Daraja still won't double-send.
-          const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-          const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-          const invoke = (fn: string) =>
-            fetch(`${supabaseUrl}/functions/v1/${fn}`, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${serviceKey}`,
-                "apikey": serviceKey,
-              },
-              body: JSON.stringify({
-                template: "order_payment_receipt",
-                recordId: payment.order_id,
-              }),
-            }).catch((e) => console.warn(`mpesa-callback: ${fn} invoke failed`, e));
-          void invoke("send-email");
-          void invoke("send-sms");
+          void invoke("send-email", { template: "order_payment_receipt", recordId: payment.order_id });
+          void invoke("send-sms", { template: "order_payment_receipt", recordId: payment.order_id });
+          // Notify admins of the new paid order via SMS.
+          void invoke("send-sms", { template: "admin_new_order", recordId: payment.order_id });
           // WhatsApp notifications are temporarily disabled.
-          // void invoke("send-whatsapp");
+          // void invoke("send-whatsapp", { template: "order_payment_receipt", recordId: payment.order_id });
         }
       } else if (payment.reservation_id) {
         // ── RESERVATION DEPOSIT ───────────────────────────────────────────
-        // Mark the reservation deposit as paid + auto-confirm if still pending.
         const { data: resRow } = await supabase
           .from("reservation_leads")
           .select("deposit_status, status")
@@ -158,6 +157,16 @@ Deno.serve((req) => withTimedLog("mpesa-callback", async () => {
             .eq("id", payment.reservation_id);
         }
       }
+    } else if (payment.order_id) {
+      // ── FAILED / CANCELLED / TIMED-OUT ORDER PAYMENT ───────────────────
+      // Mirror the failure on the order so it is excluded from the admin
+      // panel (which only shows payment_status = "paid"). We never overwrite
+      // a row that was somehow already paid.
+      await supabase
+        .from("orders")
+        .update({ payment_status: newStatus === "cancelled" ? "cancelled" : "failed" })
+        .eq("id", payment.order_id)
+        .neq("payment_status", "paid");
     }
 
     return ackResponse();

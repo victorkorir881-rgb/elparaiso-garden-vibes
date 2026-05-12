@@ -78,7 +78,19 @@ async function fanOutOrderReceipt(orderId: string, supabaseUrl: string, serviceK
       }),
     }).catch((e) => logger.warn(`payment-status ${fn} invoke failed`, { order_id: orderId }, e));
 
-  await Promise.allSettled([invoke("send-email"), invoke("send-sms")]);
+  await Promise.allSettled([
+    invoke("send-email"),
+    invoke("send-sms"),
+    fetch(`${supabaseUrl}/functions/v1/send-sms`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${serviceKey}`,
+        "apikey": serviceKey,
+      },
+      body: JSON.stringify({ template: "admin_new_order", recordId: orderId }),
+    }).catch((e) => logger.warn("payment-status admin send-sms invoke failed", { order_id: orderId }, e)),
+  ]);
 }
 
 async function finalizeSuccessfulTarget(
@@ -226,6 +238,14 @@ async function reconcilePayment(supabase: ReturnType<typeof createClient>, payme
 
     if (resolvedPayment.status === "success") {
       await finalizeSuccessfulTarget(supabase, resolvedPayment, serviceKey, supabaseUrl);
+    } else if (resolvedPayment.order_id) {
+      // Mirror failure on the order so it stays out of the admin panel
+      // (which only shows payment_status = "paid").
+      await supabase
+        .from("orders")
+        .update({ payment_status: resolvedPayment.status === "cancelled" ? "cancelled" : "failed" })
+        .eq("id", resolvedPayment.order_id)
+        .neq("payment_status", "paid");
     }
 
     return resolvedPayment;

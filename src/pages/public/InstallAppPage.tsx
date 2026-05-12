@@ -8,6 +8,7 @@ import {
   Share, Plus, MoreVertical, ChevronDown,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useInstallStatus } from "@/hooks/useInstallStatus";
 
 type BIPEvent = Event & {
   prompt: () => Promise<void>;
@@ -27,7 +28,7 @@ function detectPlatform(): Platform {
 
 export default function InstallAppPage() {
   const [installEvt, setInstallEvt] = useState<BIPEvent | null>(null);
-  const [installed, setInstalled] = useState(false);
+  const installed = useInstallStatus();
   const [platform, setPlatform] = useState<Platform>("unknown");
   const [openTab, setOpenTab] = useState<Platform>("ios");
 
@@ -62,18 +63,11 @@ export default function InstallAppPage() {
       setInstallEvt(e as BIPEvent);
     };
     const onInstalled = () => {
-      setInstalled(true);
       setInstallEvt(null);
       toast.success("App installed!");
     };
     window.addEventListener("beforeinstallprompt", onPrompt);
     window.addEventListener("appinstalled", onInstalled);
-
-    const standalone =
-      window.matchMedia?.("(display-mode: standalone)").matches ||
-      // iOS legacy
-      (navigator as any).standalone === true;
-    if (standalone) setInstalled(true);
 
     return () => {
       window.removeEventListener("beforeinstallprompt", onPrompt);
@@ -88,7 +82,7 @@ export default function InstallAppPage() {
     }
     await installEvt.prompt();
     const { outcome } = await installEvt.userChoice;
-    if (outcome === "accepted") setInstalled(true);
+    if (outcome === "accepted") { /* installed flips via useInstallStatus */ }
     setInstallEvt(null);
   };
 

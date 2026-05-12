@@ -68,7 +68,7 @@ function useNotifications() {
           .from("orders")
           .select("id, order_number, customer_name, status, created_at")
           .eq("status", "pending")
-          .neq("payment_status", "pending")
+          .eq("payment_status", "paid")
           .order("created_at", { ascending: false })
           .limit(MAX_PER_KIND),
         sb

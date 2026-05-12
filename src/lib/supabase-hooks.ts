@@ -495,10 +495,11 @@ export function useOrders(opts?: { status?: string; search?: string; includeUnpa
     queryFn: async () => {
       let q = supabase.from("orders").select("*").order("created_at", { ascending: false });
       if (opts?.status) q = q.eq("status", opts.status);
-      // Enforce "pay first": hide orders that haven't completed M-Pesa payment
-      // from admin views. Customers can still poll their own order via the
-      // tracking page (useOrderByNumber) regardless of payment status.
-      if (!opts?.includeUnpaid) q = q.neq("payment_status", "pending");
+      // Enforce "pay first": only orders with a successful payment reach the
+      // admin panel. Pending, failed, cancelled and timed-out payments stay
+      // hidden. Customers can still poll their own order via the tracking
+      // page (useOrderByNumber) regardless of payment status.
+      if (!opts?.includeUnpaid) q = q.eq("payment_status", "paid");
       if (opts?.search) q = q.or(`order_number.ilike.%${opts.search}%,customer_name.ilike.%${opts.search}%,customer_phone.ilike.%${opts.search}%`);
       const { data, error } = await q;
       if (error) throw error;
@@ -631,7 +632,7 @@ export function useOrderStats() {
       const { data, error } = await supabase
         .from("orders")
         .select("status")
-        .neq("payment_status", "pending");
+        .eq("payment_status", "paid");
       if (error) throw error;
       const all = data ?? [];
       return {
@@ -758,14 +759,40 @@ export function useAdminDashboardStats() {
     queryKey: ["adminDashboard"],
     queryFn: async () => {
       const today = new Date().toISOString().split("T")[0];
-      const [resToday, resPending, menuFeatured, gallery, events, unread] = await Promise.all([
+      const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
+      const startISO = startOfToday.toISOString();
+      const activeOrderStatuses = ["pending", "confirmed", "preparing", "ready", "out_for_delivery"];
+      const [
+        resToday, resPending, menuFeatured, gallery, events, unread,
+        ordersToday, ordersActive, ordersRevenueToday,
+        ordersPendingConfirm, ordersByStatus,
+      ] = await Promise.all([
         supabase.from("reservation_leads").select("*", { count: "exact", head: true }).eq("date", today),
         supabase.from("reservation_leads").select("*", { count: "exact", head: true }).eq("status", "pending"),
         supabase.from("menu_items").select("*", { count: "exact", head: true }).eq("is_featured", true),
         supabase.from("gallery_images").select("*", { count: "exact", head: true }),
         supabase.from("events").select("*", { count: "exact", head: true }).eq("is_active", true),
         supabase.from("contact_messages").select("*", { count: "exact", head: true }).eq("is_read", false),
+        supabase.from("orders").select("*", { count: "exact", head: true })
+          .eq("payment_status", "paid").gte("created_at", startISO),
+        supabase.from("orders").select("*", { count: "exact", head: true })
+          .eq("payment_status", "paid").in("status", activeOrderStatuses),
+        supabase.from("orders").select("total_amount")
+          .eq("payment_status", "paid").gte("created_at", startISO),
+        supabase.from("orders").select("*", { count: "exact", head: true })
+          .eq("payment_status", "paid").eq("status", "pending"),
+        supabase.from("orders").select("status")
+          .eq("payment_status", "paid").in("status", activeOrderStatuses),
       ]);
+      const revenueToday = (ordersRevenueToday.data ?? []).reduce(
+        (sum: number, r: any) => sum + Number(r.total_amount ?? 0), 0,
+      );
+      const statusBreakdown = (ordersByStatus.data ?? []).reduce(
+        (acc: Record<string, number>, r: any) => {
+          acc[r.status] = (acc[r.status] ?? 0) + 1;
+          return acc;
+        }, {},
+      );
       return {
         reservationsToday: resToday.count ?? 0,
         pendingReservations: resPending.count ?? 0,
@@ -773,6 +800,11 @@ export function useAdminDashboardStats() {
         galleryCount: gallery.count ?? 0,
         activeEvents: events.count ?? 0,
         newMessages: unread.count ?? 0,
+        ordersToday: ordersToday.count ?? 0,
+        activeOrders: ordersActive.count ?? 0,
+        ordersPendingConfirmation: ordersPendingConfirm.count ?? 0,
+        ordersByStatus: statusBreakdown,
+        revenueToday,
       };
     },
   });

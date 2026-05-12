@@ -24,8 +24,9 @@ type AuthState = {
 type AuthContextType = AuthState & {
   error: string | null;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null }>;
+  signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null; needsEmailConfirmation: boolean }>;
   signInWithGoogle: (redirectPath?: string) => Promise<{ error: string | null }>;
+  resetPassword: (email: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -126,22 +127,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signUp = useCallback(async (email: string, password: string, fullName: string) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: { full_name: fullName },
-        emailRedirectTo: siteUrl("/admin/login"),
+        emailRedirectTo: siteUrl("/account"),
       },
     });
-    if (error) return { error: error.message };
-    return { error: null };
+    if (error) return { error: error.message, needsEmailConfirmation: false };
+    // If a session was returned the user is signed in immediately; otherwise
+    // Supabase requires email confirmation before sign-in.
+    return { error: null, needsEmailConfirmation: !data.session };
   }, []);
 
   const signInWithGoogle = useCallback(async (redirectPath?: string) => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: siteUrl(redirectPath ?? "/account") },
+    });
+    if (error) return { error: error.message };
+    return { error: null };
+  }, []);
+
+  const resetPassword = useCallback(async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: siteUrl("/reset-password"),
     });
     if (error) return { error: error.message };
     return { error: null };
@@ -192,10 +203,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signIn,
     signUp,
     signInWithGoogle,
+    resetPassword,
     signOut,
     refresh,
     logout: signOut,
-  }), [state, signIn, signUp, signInWithGoogle, signOut, refresh]);
+  }), [state, signIn, signUp, signInWithGoogle, resetPassword, signOut, refresh]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

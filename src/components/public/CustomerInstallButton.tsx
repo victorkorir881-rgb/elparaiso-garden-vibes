@@ -3,6 +3,7 @@ import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
+import { useInstallStatus } from "@/hooks/useInstallStatus";
 
 type BIPEvent = Event & {
   prompt: () => Promise<void>;
@@ -20,7 +21,7 @@ type BIPEvent = Event & {
 export default function CustomerInstallButton() {
   const navigate = useNavigate();
   const [installEvt, setInstallEvt] = useState<BIPEvent | null>(null);
-  const [installed, setInstalled] = useState(false);
+  const installed = useInstallStatus();
   const [supported, setSupported] = useState(false);
 
   useEffect(() => {
@@ -57,15 +58,10 @@ export default function CustomerInstallButton() {
       setInstallEvt(e as BIPEvent);
     };
     const onInstalled = () => {
-      setInstalled(true);
       setInstallEvt(null);
     };
     window.addEventListener("beforeinstallprompt", onPrompt);
     window.addEventListener("appinstalled", onInstalled);
-
-    if (window.matchMedia?.("(display-mode: standalone)").matches) {
-      setInstalled(true);
-    }
 
     return () => {
       window.removeEventListener("beforeinstallprompt", onPrompt);

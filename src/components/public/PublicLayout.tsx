@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { useCart } from "@/contexts/CartContext";
 import CartDrawer from "@/components/public/CartDrawer";
 import CustomerInstallButton from "@/components/public/CustomerInstallButton";
+import logoUrl from "@/assets/logo.png";
 
 const navLinks = [
   { to: "/", label: "Home" },
@@ -44,7 +45,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
         <div className="container">
           <div className="flex items-center justify-between h-16 md:h-20 gap-4">
             <Link to="/" className="flex items-center gap-2 group flex-shrink-0">
-              <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-display font-bold text-sm">E</div>
+              <img src={logoUrl} alt="Elparaiso Garden Kisii logo" className="w-10 h-10 rounded-full object-cover bg-white" loading="eager" decoding="async" />
               <div className="hidden sm:block">
                 <div className="font-display font-bold text-lg leading-tight text-foreground group-hover:text-primary transition-colors">Elparaiso</div>
                 <div className="text-xs text-muted-foreground leading-tight">Garden Kisii</div>
@@ -103,7 +104,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
                 <SheetContent side="right" className="w-72 bg-card border-border p-0">
                   <div className="flex flex-col h-full">
                     <div className="flex items-center justify-between p-6 border-b border-border">
-                      <div className="font-display font-bold text-lg text-foreground">Elparaiso Garden</div>
+                      <div className="flex items-center gap-2"><img src={logoUrl} alt="Elparaiso Garden Kisii logo" className="w-8 h-8 rounded-full object-cover bg-white" /><span className="font-display font-bold text-lg text-foreground">Elparaiso Garden</span></div>
                       <Button variant="ghost" size="icon" onClick={() => setMobileOpen(false)}><X className="w-4 h-4" /></Button>
                     </div>
                     <nav className="flex flex-col gap-1 p-4 flex-1 overflow-y-auto">
@@ -141,7 +142,7 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
         <div className="container py-12">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             <div className="lg:col-span-2">
-              <div className="font-display font-bold text-2xl text-foreground mb-2">Elparaiso Garden</div>
+              <div className="flex items-center gap-3 mb-2"><img src={logoUrl} alt="Elparaiso Garden Kisii logo" className="w-12 h-12 rounded-full object-cover bg-white" /><span className="font-display font-bold text-2xl text-foreground">Elparaiso Garden</span></div>
               <p className="text-primary text-sm font-medium mb-3">Kisii's 24/7 Bar, Grill & Chill Spot</p>
               <p className="text-muted-foreground text-sm leading-relaxed max-w-sm">Great food, chilled drinks, good music, and unforgettable vibes. Open 24/7 — dine in, drive-through, takeaway, or order delivery anytime.</p>
               <div className="flex gap-3 mt-4">

@@ -1,22 +1,30 @@
 import { createRootRoute, Outlet, useRouterState } from "@tanstack/react-router";
 import { useEffect } from "react";
+import { siteUrl } from "@/lib/site-url";
 
 export const Route = createRootRoute({
   head: () => ({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
-      { name: "theme-color", content: "#0a0a0a" },
+      { name: "theme-color", content: "#01301F" },
       { name: "robots", content: "index, follow" },
       { name: "author", content: "Elparaiso Garden Kisii" },
       { property: "og:site_name", content: "Elparaiso Garden Kisii" },
       { property: "og:type", content: "website" },
       { property: "og:locale", content: "en_KE" },
+      // Branded fallback share image — leaf routes override per page.
+      { property: "og:image", content: siteUrl("/og-image.jpg") },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
+      { property: "og:image:alt", content: "Elparaiso Garden Kisii" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@elparaisogardens" },
+      { name: "twitter:image", content: siteUrl("/og-image.jpg") },
     ],
     links: [
       { rel: "icon", href: "/favicon.ico" },
+      { rel: "apple-touch-icon", href: "/icon-192.png" },
     ],
   }),
   component: RootComponent,

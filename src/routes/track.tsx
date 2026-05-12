@@ -4,6 +4,9 @@ import { OG_IMAGES } from "@/lib/og-images";
 import { siteUrl } from "@/lib/site-url";
 
 export const Route = createFileRoute("/track")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    q: typeof search.q === "string" ? search.q : undefined,
+  }),
   head: () => ({
     meta: [
       { title: "Track Your Order — Elparaiso Garden Kisii" },

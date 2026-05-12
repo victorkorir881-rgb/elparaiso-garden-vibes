@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearch } from "@tanstack/react-router";
 import { useOrdersByPhone, useOrderByNumber } from "@/lib/supabase-hooks";
 import { useInitiateMpesaPayment, usePaymentStatus } from "@/lib/payments";
 import { Button } from "@/components/ui/button";
@@ -131,7 +132,16 @@ export default function OrderTrackingPage() {
   const [orderNumberInput, setOrderNumberInput] = useState("");
   const [phone, setPhone] = useState("");
   const [orderNumber, setOrderNumber] = useState("");
-  const [searchType, setSearchType] = useState<"phone" | "number">("phone");
+  const search = useSearch({ from: "/track" }) as { q?: string };
+  const [searchType, setSearchType] = useState<"phone" | "number">(search.q ? "number" : "phone");
+
+  useEffect(() => {
+    if (search.q) {
+      setSearchType("number");
+      setOrderNumberInput(search.q);
+      setOrderNumber(search.q);
+    }
+  }, [search.q]);
 
   const trackByPhone = useOrdersByPhone(searchType === "phone" ? phone : "");
   const trackByNumber = useOrderByNumber(searchType === "number" ? orderNumber : "");

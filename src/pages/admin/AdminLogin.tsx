@@ -89,9 +89,7 @@ export default function AdminLogin() {
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-4">
-            <span className="text-primary font-display font-bold text-2xl">E</span>
-          </div>
+          <img src="/logo.png" alt="Elparaiso Garden Kisii logo" className="w-20 h-20 rounded-full object-cover bg-white mx-auto mb-4 border border-primary/20" />
           <h1 className="text-2xl font-bold text-foreground">Admin Panel</h1>
           <p className="text-muted-foreground text-sm mt-1">Elparaiso Garden Kisii</p>
         </div>

@@ -84,8 +84,13 @@ export default function AdminProfile() {
       }
 
       await refresh();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save profile.");
+    } catch (e: unknown) {
+      console.error("[AdminProfile] save failed", e);
+      const msg =
+        (e as { message?: string } | null)?.message ||
+        (typeof e === "string" ? e : "") ||
+        "Failed to save profile.";
+      toast.error(msg);
     } finally {
       setSaving(false);
     }

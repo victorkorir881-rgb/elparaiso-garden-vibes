@@ -116,6 +116,7 @@ export default function CustomerLoginPage() {
         />
         <div className="max-w-md mx-auto">
           <div className="text-center mb-8">
+            <img src="/logo.png" alt="Elparaiso Garden Kisii logo" className="w-20 h-20 mx-auto mb-4 rounded-full object-cover bg-white border border-primary/20" />
             <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full border border-primary/30 bg-primary/5 text-xs font-medium uppercase tracking-[0.18em] text-primary">
               <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
               Customer account
@@ -382,7 +383,7 @@ export default function CustomerLoginPage() {
           {view === "auth" && (
             <p className="text-center text-sm text-foreground/55 mt-6">
               Just want to track an order?{" "}
-              <Link to="/track" className="text-primary hover:underline font-medium">
+              <Link to="/track" search={{ q: undefined }} className="text-primary hover:underline font-medium">
                 Track without signing in
               </Link>
             </p>

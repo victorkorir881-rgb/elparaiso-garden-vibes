@@ -254,7 +254,7 @@ export default function OrderPage() {
               </div>
             </Card>
             <div className="flex flex-wrap justify-center gap-3">
-              <Link to="/track"><Button>Track Your Order <ArrowRight className="w-4 h-4 ml-1.5" /></Button></Link>
+              <Link to="/track" search={{ q: undefined }}><Button>Track Your Order <ArrowRight className="w-4 h-4 ml-1.5" /></Button></Link>
               <Link to="/menu"><Button variant="outline"><UtensilsCrossed className="w-4 h-4 mr-1.5" />Order more</Button></Link>
               <Link to="/"><Button variant="outline"><Home className="w-4 h-4 mr-1.5" />Home</Button></Link>
             </div>
@@ -650,7 +650,7 @@ export default function OrderPage() {
 
               <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted-foreground">
                 <a href="tel:0791224513" className="inline-flex items-center gap-1.5 hover:text-primary"><Phone className="w-3.5 h-3.5" /> 0791 224513</a>
-                <Link to="/track" className="inline-flex items-center gap-1.5 hover:text-primary"><CalendarDays className="w-3.5 h-3.5" /> Track order</Link>
+                <Link to="/track" search={{ q: undefined }} className="inline-flex items-center gap-1.5 hover:text-primary"><CalendarDays className="w-3.5 h-3.5" /> Track order</Link>
               </div>
             </aside>
           </div>

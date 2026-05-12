@@ -137,12 +137,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="flex flex-col h-full">
       <div className="px-5 h-16 flex items-center border-b border-border/60 shrink-0">
         <Link to="/" className="flex items-center gap-3 group">
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center text-primary-foreground font-bold text-base shrink-0"
-            style={{ background: "var(--gradient-gold)", boxShadow: "var(--shadow-gold)" }}
-          >
-            E
-          </div>
+          <img
+            src="/logo.png"
+            alt="Elparaiso Garden Kisii logo"
+            className="w-9 h-9 rounded-xl object-cover bg-white shrink-0"
+            style={{ boxShadow: "var(--shadow-gold)" }}
+          />
           <div className="min-w-0">
             <div className="font-semibold text-foreground text-sm leading-tight tracking-tight">Elparaiso Garden</div>
             <div className="text-[11px] text-muted-foreground uppercase tracking-wider">Admin</div>

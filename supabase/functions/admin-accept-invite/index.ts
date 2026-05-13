@@ -27,16 +27,19 @@ Deno.serve((req) => withTimedLog("admin-accept-invite", async () => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
 
-  let body: { token?: string; email?: string; password?: string; fullName?: string };
+  let body: { token?: string; email?: string; password?: string; fullName?: string; validateOnly?: boolean };
   try { body = await req.json(); } catch { return json({ error: "Invalid JSON body" }, 400); }
 
   const token = (body.token ?? "").trim();
   const email = (body.email ?? "").trim().toLowerCase();
   const password = body.password ?? "";
   const fullName = (body.fullName ?? "").trim();
-  if (!token || token.length < 32) return json({ error: "Invalid token" }, 400);
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: "Invalid email" }, 400);
-  if (password.length < 8) return json({ error: "Password must be at least 8 characters" }, 400);
+  const validateOnly = body.validateOnly === true;
+  if (!token || token.length < 32) return json({ error: "Invalid token", code: "invalid" }, 400);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: "Invalid email", code: "invalid" }, 400);
+  if (!validateOnly && password.length < 8) {
+    return json({ error: "Password must be at least 8 characters", code: "weak_password" }, 400);
+  }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -46,11 +49,16 @@ Deno.serve((req) => withTimedLog("admin-accept-invite", async () => {
 
   // Validate invitation up front for a clean 4xx error before touching auth.
   const { data: inv } = await admin.from("admin_invitations")
-    .select("id, role, expires_at, accepted_at")
+    .select("id, role, expires_at, accepted_at, revoked_at")
     .eq("token_hash", tokenHash).eq("email", email).limit(1).maybeSingle();
-  if (!inv) return json({ error: "Invitation is invalid or already used" }, 404);
-  if (inv.accepted_at) return json({ error: "Invitation has already been used" }, 410);
-  if (new Date(inv.expires_at).getTime() < Date.now()) return json({ error: "Invitation has expired" }, 410);
+  if (!inv) return json({ error: "Invitation is invalid or has been replaced", code: "invalid" }, 404);
+  if (inv.accepted_at) return json({ error: "Invitation has already been used", code: "used" }, 410);
+  if (inv.revoked_at) return json({ error: "Invitation has been revoked by an admin", code: "revoked" }, 410);
+  if (new Date(inv.expires_at).getTime() < Date.now()) return json({ error: "Invitation has expired", code: "expired" }, 410);
+
+  if (validateOnly) {
+    return json({ ok: true, role: inv.role, email, expiresAt: inv.expires_at });
+  }
 
   // Create the auth user with email pre-confirmed. Pass token hash via
   // raw_user_meta_data so the trigger can validate + consume it.
@@ -69,6 +77,15 @@ Deno.serve((req) => withTimedLog("admin-accept-invite", async () => {
     const status = /already/i.test(msg) ? 409 : 500;
     return json({ error: msg }, status);
   }
+
+  // Audit: invite_accepted (actor is the new user themselves)
+  await admin.from("admin_activity_log").insert({
+    admin_id: created.user.id,
+    action: "invite_accepted",
+    table_name: "admin_invitations",
+    record_id: inv.id,
+    new_data: { email, role: inv.role, accepted_at: new Date().toISOString() },
+  });
 
   return json({ ok: true });
 }));

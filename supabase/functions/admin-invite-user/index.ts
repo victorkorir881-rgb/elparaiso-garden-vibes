@@ -58,11 +58,12 @@ Deno.serve((req) => withTimedLog("admin-invite-user", async () => {
     return json({ error: "Forbidden — admin only" }, 403);
   }
 
-  let body: { email?: string; role?: string };
+  let body: { email?: string; role?: string; returnLinkOnly?: boolean };
   try { body = await req.json(); } catch { return json({ error: "Invalid JSON body" }, 400); }
 
   const email = (body.email ?? "").trim().toLowerCase();
   const role = (body.role ?? "staff").trim();
+  const returnLinkOnly = body.returnLinkOnly === true;
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: "Invalid email" }, 400);
   if (!ALLOWED_ROLES.has(role)) return json({ error: "Invalid role" }, 400);
   if (role === "super_admin" && callerRole !== "super_admin") {
@@ -73,9 +74,12 @@ Deno.serve((req) => withTimedLog("admin-invite-user", async () => {
   const { data: existing } = await admin.from("admin_profiles").select("id").eq("email", email).limit(1);
   if (existing && existing.length > 0) return json({ error: "A user with that email already exists" }, 409);
 
-  // Invalidate any previous pending invitations for this email.
-  await admin.from("admin_invitations").update({ accepted_at: new Date().toISOString(), accepted_by: callerId })
-    .is("accepted_at", null).eq("email", email);
+  // Revoke any previous pending invitations for this email so the new one
+  // is the only acceptable token. Marking as revoked (not accepted) keeps
+  // the audit trail accurate.
+  await admin.from("admin_invitations")
+    .update({ revoked_at: new Date().toISOString(), revoked_by: callerId })
+    .is("accepted_at", null).is("revoked_at", null).eq("email", email);
 
   const token = randomToken();
   const tokenHash = await sha256Hex(token);
@@ -89,13 +93,40 @@ Deno.serve((req) => withTimedLog("admin-invite-user", async () => {
     return json({ error: invErr?.message ?? "Failed to create invitation" }, 500);
   }
 
-  const siteUrl = (Deno.env.get("SITE_URL") ?? "https://elparaisogardens.vercel.app").replace(/\/$/, "");
+  // Audit: invite_sent
+  await admin.from("admin_activity_log").insert({
+    admin_id: callerId,
+    action: "invite_sent",
+    table_name: "admin_invitations",
+    record_id: inv.id,
+    new_data: { email, role, expires_at: inv.expires_at, invited_by: callerId },
+  });
+
+  // Resolve site URL: explicit SITE_URL env wins; otherwise fall back to the
+  // request's Origin / Referer header so links land on the host that called us
+  // (works for preview + production without reconfiguring secrets).
+  const originHeader = req.headers.get("origin") ?? "";
+  const refererHeader = req.headers.get("referer") ?? "";
+  let siteUrl = (Deno.env.get("SITE_URL") ?? "").trim();
+  if (!siteUrl) {
+    if (originHeader) siteUrl = originHeader;
+    else if (refererHeader) {
+      try { siteUrl = new URL(refererHeader).origin; } catch { /* ignore */ }
+    }
+  }
+  if (!siteUrl) siteUrl = "https://elparaisogardens.vercel.app";
+  siteUrl = siteUrl.replace(/\/$/, "");
   const link = `${siteUrl}/admin/accept-invite?token=${token}&email=${encodeURIComponent(email)}`;
+
+  // "Copy link" path: caller wants the URL only, no email send.
+  if (returnLinkOnly) {
+    return json({ ok: true, invitationId: inv.id, link });
+  }
 
   const resendKey = Deno.env.get("RESEND_API_KEY");
   if (!resendKey) {
     logger.warn("RESEND_API_KEY missing — invitation created but email not sent", { invitationId: inv.id });
-    return json({ ok: true, invitationId: inv.id, link, warning: "RESEND_API_KEY not configured; share the link manually." });
+    return json({ ok: true, invitationId: inv.id, link, warning: "Email not configured. Copy this link and send it to the invitee manually." });
   }
 
   const from = Deno.env.get("EMAIL_FROM") ?? "Elparaiso Garden <onboarding@resend.dev>";
@@ -119,7 +150,14 @@ Deno.serve((req) => withTimedLog("admin-invite-user", async () => {
   if (!r.ok) {
     const text = await r.text();
     logger.error("resend-failed", { status: r.status, body: text });
-    return json({ error: "Failed to send invitation email", details: text }, 502);
+    // Don't fail the whole flow — invitation row exists. Surface the link so
+    // the admin can deliver it manually while email config is being fixed.
+    return json({
+      ok: true,
+      invitationId: inv.id,
+      link,
+      warning: `Could not send the invitation email (${r.status}). Copy this link and send it to the invitee. Details: ${text.slice(0, 200)}`,
+    });
   }
   return json({ ok: true, invitationId: inv.id });
 }));

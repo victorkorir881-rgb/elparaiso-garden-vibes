@@ -846,6 +846,76 @@ export function useAdminUsers() {
   });
 }
 
+// Pending (unaccepted, unexpired) admin invitations — used to render the
+// resend list. Relies on RLS policy admin_invitations_admin_all (0015).
+export function usePendingInvitations() {
+  return useQuery({
+    queryKey: ["adminPendingInvitations"],
+    queryFn: async () => {
+      const nowIso = new Date().toISOString();
+      const { data, error } = await (supabase as any)
+        .from("admin_invitations")
+        .select("id, email, role, created_at, expires_at, accepted_at, revoked_at")
+        .is("accepted_at", null)
+        .is("revoked_at", null)
+        .gt("expires_at", nowIso)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as Array<{ id: string; email: string; role: string; created_at: string; expires_at: string; accepted_at: string | null; revoked_at: string | null }>;
+    },
+  });
+}
+
+// Invitation audit trail — sent / accepted (from admin_activity_log) and
+// expired (synthesized from admin_invitations). Backed by v_invite_audit
+// which is admin-readable through security_invoker + base-table RLS.
+export type InviteAuditEvent = "invite_sent" | "invite_accepted" | "invite_expired" | "invite_revoked";
+export type InviteAuditRow = {
+  id: string;
+  event_at: string;
+  event: InviteAuditEvent;
+  email: string | null;
+  role: string | null;
+  invitation_id: string | null;
+  actor_id: string | null;
+  actor_name?: string | null;
+  actor_email?: string | null;
+  details: any;
+};
+
+export function useInviteAudit(limit = 50) {
+  return useQuery({
+    queryKey: ["adminInviteAudit", limit],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("v_invite_audit")
+        .select("id, event_at, event, email, role, invitation_id, actor_id, details")
+        .order("event_at", { ascending: false })
+        .limit(limit);
+      if (error) throw error;
+      const rows = (data ?? []) as InviteAuditRow[];
+
+      // Hydrate actor names in one follow-up query.
+      const actorIds = Array.from(new Set(rows.map((r) => r.actor_id).filter(Boolean))) as string[];
+      const map: Record<string, { full_name: string | null; email: string | null }> = {};
+      if (actorIds.length) {
+        const { data: profs } = await supabase
+          .from("admin_profiles")
+          .select("id, full_name, email")
+          .in("id", actorIds);
+        for (const p of profs ?? []) map[p.id] = { full_name: p.full_name, email: p.email };
+      }
+      return rows.map((r) => ({
+        ...r,
+        actor_name: r.actor_id ? map[r.actor_id]?.full_name ?? null : null,
+        actor_email: r.actor_id ? map[r.actor_id]?.email ?? null : null,
+      }));
+    },
+    refetchInterval: 30_000,
+  });
+}
+
+
 export function useUpdateUserRole() {
   const qc = useQueryClient();
   return useMutation({

@@ -1,13 +1,14 @@
 import { useState } from "react";
-import { Shield, Trash2, UserPlus } from "lucide-react";
+import { Shield, Trash2, UserPlus, Mail, RefreshCw, Send, CheckCircle2, Clock, ScrollText, Link2, Ban, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useAdminUsers, useUpdateUserRole, useDeleteAdminUser } from "@/lib/supabase-hooks";
+import { useAdminUsers, useUpdateUserRole, useDeleteAdminUser, usePendingInvitations, useInviteAudit, type InviteAuditEvent } from "@/lib/supabase-hooks";
 import { useAuth } from "@/lib/auth";
 
 const ROLE_COLORS: Record<string, string> = {
@@ -16,6 +17,13 @@ const ROLE_COLORS: Record<string, string> = {
   manager: "bg-blue-500/20 text-blue-400 border-blue-500/30",
   staff: "bg-green-500/20 text-green-400 border-green-500/30",
   user: "bg-muted text-muted-foreground border-border",
+};
+
+const INVITE_EVENT_META: Record<InviteAuditEvent, { label: string; icon: typeof Send; bg: string; fg: string }> = {
+  invite_sent:     { label: "SENT",     icon: Send,         bg: "bg-blue-500/15",  fg: "text-blue-400" },
+  invite_accepted: { label: "ACCEPTED", icon: CheckCircle2, bg: "bg-green-500/15", fg: "text-green-400" },
+  invite_expired:  { label: "EXPIRED",  icon: Clock,        bg: "bg-muted",        fg: "text-muted-foreground" },
+  invite_revoked:  { label: "REVOKED",  icon: XCircle,      bg: "bg-destructive/15", fg: "text-destructive" },
 };
 
 export default function AdminUsers() {
@@ -30,33 +38,116 @@ export default function AdminUsers() {
   const [inviteRole, setInviteRole] = useState("staff");
   const [inviting, setInviting] = useState(false);
 
+  const [resendingId, setResendingId] = useState<string | null>(null);
+  const [copyingId, setCopyingId] = useState<string | null>(null);
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+
   const { user: currentUser, signOut } = useAuth();
   const { data: users, isLoading } = useAdminUsers();
+  const { data: pending, isLoading: pendingLoading } = usePendingInvitations();
+  const { data: auditRows, isLoading: auditLoading } = useInviteAudit(50);
   const updateRole = useUpdateUserRole();
   const deleteUser = useDeleteAdminUser();
+  const qc = useQueryClient();
 
   const canInvite = ["super_admin", "admin"].includes(currentUser?.role ?? "");
+
+  const inviteEmailFn = async (email: string, role: string) => {
+    const { data, error } = await supabase.functions.invoke("admin-invite-user", {
+      body: { email, role },
+    });
+    if (error) throw error;
+    const payload = data as { ok?: boolean; error?: string; warning?: string; link?: string } | null;
+    if (!payload?.ok) throw new Error(payload?.error ?? "Failed to send invitation");
+    if (payload.warning && payload.link) {
+      try { await navigator.clipboard.writeText(payload.link); } catch { /* ignore */ }
+      toast.warning(`${payload.warning} (link copied to clipboard)`, { duration: 12000 });
+    } else {
+      toast.success(`Invitation sent to ${email}`);
+    }
+  };
 
   const sendInvite = async () => {
     const email = inviteEmail.trim().toLowerCase();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return toast.error("Enter a valid email address.");
     setInviting(true);
     try {
-      const { data, error } = await supabase.functions.invoke("admin-invite-user", {
-        body: { email, role: inviteRole },
-      });
-      if (error) throw error;
-      const payload = data as { ok?: boolean; error?: string; warning?: string; link?: string } | null;
-      if (!payload?.ok) throw new Error(payload?.error ?? "Failed to send invitation");
-      if (payload.warning) toast.warning(`${payload.warning}${payload.link ? `\n${payload.link}` : ""}`);
-      else toast.success(`Invitation sent to ${email}`);
+      await inviteEmailFn(email, inviteRole);
       setInviteOpen(false);
       setInviteEmail("");
       setInviteRole("staff");
+      qc.invalidateQueries({ queryKey: ["adminPendingInvitations"] });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Failed to send invitation");
     } finally {
       setInviting(false);
+    }
+  };
+
+  const resendInvite = async (inv: { id: string; email: string; role: string }) => {
+    setResendingId(inv.id);
+    try {
+      await inviteEmailFn(inv.email, inv.role);
+      qc.invalidateQueries({ queryKey: ["adminPendingInvitations"] });
+      qc.invalidateQueries({ queryKey: ["adminInviteAudit"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to resend invitation");
+    } finally {
+      setResendingId(null);
+    }
+  };
+
+  const copyInviteLink = async (inv: { id: string; email: string; role: string }) => {
+    setCopyingId(inv.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-invite-user", {
+        body: { email: inv.email, role: inv.role, returnLinkOnly: true },
+      });
+      if (error) throw error;
+      const payload = data as { ok?: boolean; error?: string; link?: string } | null;
+      if (!payload?.ok || !payload.link) throw new Error(payload?.error ?? "Failed to generate link");
+      try {
+        await navigator.clipboard.writeText(payload.link);
+        toast.success("Invitation link copied to clipboard");
+      } catch {
+        toast.message("Invitation link", { description: payload.link, duration: 15000 });
+      }
+      qc.invalidateQueries({ queryKey: ["adminPendingInvitations"] });
+      qc.invalidateQueries({ queryKey: ["adminInviteAudit"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to copy invitation link");
+    } finally {
+      setCopyingId(null);
+    }
+  };
+
+  const revokeInvite = async (inv: { id: string; email: string; role: string }) => {
+    if (!window.confirm(`Revoke the pending invitation for ${inv.email}? The current link will stop working.`)) return;
+    setRevokingId(inv.id);
+    try {
+      const nowIso = new Date().toISOString();
+      const { error } = await (supabase as any)
+        .from("admin_invitations")
+        .update({ revoked_at: nowIso, revoked_by: currentUser?.id ?? null })
+        .eq("id", inv.id)
+        .is("accepted_at", null)
+        .is("revoked_at", null);
+      if (error) throw error;
+      // Audit log entry so the trail shows REVOKED with actor attribution.
+      await (supabase as any).from("admin_activity_log").insert({
+        admin_id: currentUser?.id ?? null,
+        action: "invite_revoked",
+        table_name: "admin_invitations",
+        record_id: inv.id,
+        new_data: { email: inv.email, role: inv.role, revoked_at: nowIso },
+      });
+      toast.success(`Invitation for ${inv.email} revoked`);
+      qc.invalidateQueries({ queryKey: ["adminPendingInvitations"] });
+      qc.invalidateQueries({ queryKey: ["adminInviteAudit"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to revoke invitation");
+    } finally {
+      setRevokingId(null);
     }
   };
 
@@ -104,6 +195,128 @@ export default function AdminUsers() {
         <p><strong className="text-foreground">Role hierarchy:</strong> Super Admin → Admin → Manager → Staff → User</p>
         <p className="mt-1">Only <strong className="text-primary">Admin</strong> and above roles can access the admin panel.</p>
       </div>
+
+      {canInvite && (
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Mail className="w-4 h-4 text-primary" />
+              <h2 className="text-sm font-semibold text-foreground">Pending invitations</h2>
+              {pending && pending.length > 0 && (
+                <Badge className="bg-primary/15 text-primary border border-primary/30 text-xs">{pending.length}</Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground hidden sm:block">Unaccepted invites that haven't expired</p>
+          </div>
+          {pendingLoading ? (
+            <div className="px-4 py-6 text-center text-muted-foreground text-sm">Loading…</div>
+          ) : pending && pending.length > 0 ? (
+            <ul className="divide-y divide-border">
+              {pending.map((inv) => {
+                const expires = new Date(inv.expires_at);
+                const daysLeft = Math.max(0, Math.ceil((expires.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+                return (
+                  <li key={inv.id} className="px-4 py-3 flex flex-wrap items-center gap-3">
+                    <div className="flex-1 min-w-[160px]">
+                      <div className="text-sm font-medium text-foreground break-all">{inv.email}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        Expires in {daysLeft} day{daysLeft === 1 ? "" : "s"} · sent {new Date(inv.created_at).toLocaleDateString()}
+                      </div>
+                    </div>
+                    <Badge className={`text-xs border ${ROLE_COLORS[inv.role] ?? ROLE_COLORS.user}`}>{inv.role}</Badge>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-border text-foreground hover:bg-accent text-xs"
+                      onClick={() => copyInviteLink(inv)}
+                      disabled={copyingId === inv.id || revokingId === inv.id}
+                      title="Generate a fresh one-time link and copy it to your clipboard"
+                    >
+                      <Link2 className="w-3.5 h-3.5 mr-1" />
+                      {copyingId === inv.id ? "Copying…" : "Copy link"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-border text-foreground hover:bg-accent text-xs"
+                      onClick={() => resendInvite(inv)}
+                      disabled={resendingId === inv.id || revokingId === inv.id}
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 mr-1 ${resendingId === inv.id ? "animate-spin" : ""}`} />
+                      {resendingId === inv.id ? "Resending…" : "Resend email"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="border-destructive/40 text-destructive hover:bg-destructive/10 text-xs"
+                      onClick={() => revokeInvite(inv)}
+                      disabled={revokingId === inv.id || resendingId === inv.id || copyingId === inv.id}
+                      title="Cancel this invitation so the current link can no longer be used"
+                    >
+                      <Ban className="w-3.5 h-3.5 mr-1" />
+                      {revokingId === inv.id ? "Revoking…" : "Revoke"}
+                    </Button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className="px-4 py-6 text-center text-muted-foreground text-sm">No pending invitations.</div>
+          )}
+        </div>
+      )}
+
+      {canInvite && (
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ScrollText className="w-4 h-4 text-primary" />
+              <h2 className="text-sm font-semibold text-foreground">Invitations audit trail</h2>
+              {auditRows && auditRows.length > 0 && (
+                <Badge className="bg-muted text-muted-foreground border border-border text-xs">{auditRows.length}</Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground hidden sm:block">Most recent 50 invitation events</p>
+          </div>
+          {auditLoading ? (
+            <div className="px-4 py-6 text-center text-muted-foreground text-sm">Loading…</div>
+          ) : auditRows && auditRows.length > 0 ? (
+            <ul className="divide-y divide-border">
+              {auditRows.map((row) => {
+                const meta = INVITE_EVENT_META[row.event] ?? INVITE_EVENT_META.invite_sent;
+                const Icon = meta.icon;
+                return (
+                  <li key={row.id} className="px-4 py-3 flex items-start gap-3">
+                    <div className={`mt-0.5 w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${meta.bg}`}>
+                      <Icon className={`w-3.5 h-3.5 ${meta.fg}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`text-xs font-semibold ${meta.fg}`}>{meta.label}</span>
+                        <span className="text-sm text-foreground break-all">{row.email ?? "—"}</span>
+                        {row.role && (
+                          <Badge className={`text-[10px] border ${ROLE_COLORS[row.role] ?? ROLE_COLORS.user}`}>{row.role}</Badge>
+                        )}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        {new Date(row.event_at).toLocaleString()}
+                        {(row.event === "invite_sent" || row.event === "invite_revoked") && row.actor_id && (
+                          <> · by {row.actor_name || row.actor_email || row.actor_id.slice(0, 8)}</>
+                        )}
+                        {row.event === "invite_accepted" && (
+                          <> · activated by invitee</>
+                        )}
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className="px-4 py-6 text-center text-muted-foreground text-sm">No invitation events yet.</div>
+          )}
+        </div>
+      )}
 
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <table className="w-full text-sm">

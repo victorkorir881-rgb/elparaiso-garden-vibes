@@ -37,8 +37,8 @@ Deno.serve((req) => withTimedLog("admin-accept-invite", async () => {
   const validateOnly = body.validateOnly === true;
   if (!token || token.length < 32) return json({ error: "Invalid token", code: "invalid" }, 400);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: "Invalid email", code: "invalid" }, 400);
-  if (!validateOnly && password.length < 8) {
-    return json({ error: "Password must be at least 8 characters", code: "weak_password" }, 400);
+  if (!validateOnly && password.length < 6) {
+    return json({ error: "Password must be at least 6 characters", code: "weak_password" }, 400);
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -54,7 +54,6 @@ Deno.serve((req) => withTimedLog("admin-accept-invite", async () => {
   if (!inv) return json({ error: "Invitation is invalid or has been replaced", code: "invalid" }, 404);
   if (inv.accepted_at) return json({ error: "Invitation has already been used", code: "used" }, 410);
   if (inv.revoked_at) return json({ error: "Invitation has been revoked by an admin", code: "revoked" }, 410);
-  if (new Date(inv.expires_at).getTime() < Date.now()) return json({ error: "Invitation has expired", code: "expired" }, 410);
 
   if (validateOnly) {
     return json({ ok: true, role: inv.role, email, expiresAt: inv.expires_at });

@@ -846,19 +846,17 @@ export function useAdminUsers() {
   });
 }
 
-// Pending (unaccepted, unexpired) admin invitations — used to render the
-// resend list. Relies on RLS policy admin_invitations_admin_all (0015).
+// Pending admin invitations — used to render the resend list. Expiry is shown
+// as context only; admins can resend/revoke any unaccepted invite.
 export function usePendingInvitations() {
   return useQuery({
     queryKey: ["adminPendingInvitations"],
     queryFn: async () => {
-      const nowIso = new Date().toISOString();
       const { data, error } = await (supabase as any)
         .from("admin_invitations")
         .select("id, email, role, created_at, expires_at, accepted_at, revoked_at")
         .is("accepted_at", null)
         .is("revoked_at", null)
-        .gt("expires_at", nowIso)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as Array<{ id: string; email: string; role: string; created_at: string; expires_at: string; accepted_at: string | null; revoked_at: string | null }>;

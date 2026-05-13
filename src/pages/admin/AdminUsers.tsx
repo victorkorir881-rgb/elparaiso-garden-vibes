@@ -206,7 +206,7 @@ export default function AdminUsers() {
                 <Badge className="bg-primary/15 text-primary border border-primary/30 text-xs">{pending.length}</Badge>
               )}
             </div>
-            <p className="text-xs text-muted-foreground hidden sm:block">Unaccepted invites that haven't expired</p>
+            <p className="text-xs text-muted-foreground hidden sm:block">Unaccepted invites ready to copy, resend, or revoke</p>
           </div>
           {pendingLoading ? (
             <div className="px-4 py-6 text-center text-muted-foreground text-sm">Loading…</div>
@@ -214,13 +214,16 @@ export default function AdminUsers() {
             <ul className="divide-y divide-border">
               {pending.map((inv) => {
                 const expires = new Date(inv.expires_at);
-                const daysLeft = Math.max(0, Math.ceil((expires.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+                const daysLeft = Math.ceil((expires.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                const expiryText = daysLeft > 0
+                  ? `Suggested follow-up in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`
+                  : "Invite link remains usable unless revoked";
                 return (
                   <li key={inv.id} className="px-4 py-3 flex flex-wrap items-center gap-3">
                     <div className="flex-1 min-w-[160px]">
                       <div className="text-sm font-medium text-foreground break-all">{inv.email}</div>
                       <div className="text-xs text-muted-foreground mt-0.5">
-                        Expires in {daysLeft} day{daysLeft === 1 ? "" : "s"} · sent {new Date(inv.created_at).toLocaleDateString()}
+                        {expiryText} · sent {new Date(inv.created_at).toLocaleDateString()}
                       </div>
                     </div>
                     <Badge className={`text-xs border ${ROLE_COLORS[inv.role] ?? ROLE_COLORS.user}`}>{inv.role}</Badge>

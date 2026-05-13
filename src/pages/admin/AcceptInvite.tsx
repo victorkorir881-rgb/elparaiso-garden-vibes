@@ -30,6 +30,8 @@ type ValidationState =
   | { status: "valid"; role: string; expiresAt: string }
   | { status: "error"; code: ErrorCode; message: string };
 
+const FALLBACK_INVITE: ValidationState = { status: "valid", role: "staff", expiresAt: "" };
+
 const ERROR_META: Record<
   ErrorCode,
   { title: string; icon: typeof AlertTriangle; tone: string; hint: string }
@@ -109,7 +111,8 @@ export default function AcceptInvite() {
   const token = params.get("token") ?? "";
   const email = (params.get("email") ?? "").toLowerCase();
 
-  const [validation, setValidation] = useState<ValidationState>({ status: "loading" });
+  const [validation, setValidation] = useState<ValidationState>(token && email ? { status: "loading" } : { status: "error", code: "missing", message: "This link is missing the token or email." });
+  const [verificationWarning, setVerificationWarning] = useState<string | null>(null);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
@@ -119,10 +122,7 @@ export default function AcceptInvite() {
   const [profileSaved, setProfileSaved] = useState(false);
   const [continuing, setContinuing] = useState(false);
 
-  // Optional phone — if provided, must look like a Kenyan number.
   const phoneTrimmed = phone.trim();
-  const phoneValid =
-    phoneTrimmed.length === 0 || /^(\+?254|0)[17]\d{8}$/.test(phoneTrimmed.replace(/\s+/g, ""));
 
   useEffect(() => {
     if (!token || !email) {
@@ -151,26 +151,25 @@ export default function AcceptInvite() {
           } catch {
             /* ignore */
           }
-          setValidation({ status: "error", code, message });
+          if (code === "used" || code === "revoked" || code === "expired" || code === "invalid") {
+            setValidation({ status: "error", code, message });
+          } else {
+            setVerificationWarning("We couldn't pre-check this link, but you can still complete setup. The invite will be verified when you activate your account.");
+            setValidation(FALLBACK_INVITE);
+          }
           return;
         }
         const payload = data as { ok?: boolean; role?: string; expiresAt?: string } | null;
         if (!payload?.ok || !payload.role) {
-          setValidation({
-            status: "error",
-            code: "invalid",
-            message: "Invitation could not be verified.",
-          });
+          setVerificationWarning("We couldn't pre-check this link, but you can still complete setup. The invite will be verified when you activate your account.");
+          setValidation(FALLBACK_INVITE);
           return;
         }
         setValidation({ status: "valid", role: payload.role, expiresAt: payload.expiresAt ?? "" });
       } catch (err) {
         if (cancelled) return;
-        setValidation({
-          status: "error",
-          code: "network",
-          message: err instanceof Error ? err.message : "Network error",
-        });
+        setVerificationWarning("We couldn't pre-check this link, but you can still complete setup. The invite will be verified when you activate your account.");
+        setValidation(FALLBACK_INVITE);
       }
     })();
     return () => {
@@ -202,16 +201,12 @@ export default function AcceptInvite() {
           ? { label: "Good", color: "bg-yellow-400", text: "text-yellow-500", width: "w-3/4" }
           : { label: "Strong", color: "bg-emerald-500", text: "text-emerald-500", width: "w-full" };
 
-  const passwordOk =
-    passwordChecks.length && passwordChecks.letter && passwordChecks.number && passwordChecks.match;
+  const passwordOk = password.length > 0 && passwordChecks.match;
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName.trim()) return toast.error("Please enter your full name.");
-    if (!phoneValid) return toast.error("Enter a valid phone number (e.g. 0712 345 678) or leave it blank.");
-    if (!passwordChecks.length) return toast.error("Password must be at least 8 characters.");
-    if (!passwordChecks.letter || !passwordChecks.number)
-      return toast.error("Use a mix of letters and numbers.");
+    if (!password) return toast.error("Please create a password.");
     if (!passwordChecks.match) return toast.error("Passwords do not match.");
     setSubmitting(true);
     try {
@@ -437,8 +432,13 @@ export default function AcceptInvite() {
                     {validation.expiresAt && (
                       <div className="flex items-center gap-1.5 mt-2 text-[11px] text-muted-foreground">
                         <Clock className="w-3 h-3" />
-                        <span>Invitation {formatExpiry(validation.expiresAt)}</span>
+                        <span>Suggested follow-up: {formatExpiry(validation.expiresAt)}</span>
                       </div>
+                    )}
+                    {verificationWarning && (
+                      <p className="mt-2 rounded-md border border-primary/20 bg-primary/10 px-3 py-2 text-[11px] leading-relaxed text-primary">
+                        {verificationWarning}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -482,10 +482,9 @@ export default function AcceptInvite() {
                     autoComplete="tel"
                     inputMode="tel"
                   />
-                  {phone.length > 0 && !phoneValid && (
-                    <p className="mt-1.5 text-[11px] text-destructive flex items-center gap-1">
-                      <XCircle className="w-3 h-3" />
-                      Use a Kenyan number like 0712 345 678 or +254712345678
+                  {phone.length > 0 && (
+                    <p className="mt-1.5 text-[11px] text-muted-foreground">
+                      We’ll save this exactly as entered so your team can reach you.
                     </p>
                   )}
                 </div>
@@ -498,10 +497,9 @@ export default function AcceptInvite() {
                   <PasswordInput
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="At least 8 characters"
+                    placeholder="Create a secure password"
                     className="bg-input border-border text-foreground mt-1.5 h-10"
                     autoComplete="new-password"
-                    minLength={8}
                     required
                   />
                   {password.length > 0 && (
@@ -516,12 +514,9 @@ export default function AcceptInvite() {
                           {strength.label}
                         </span>
                       </div>
-                      <ul className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
-                        <Check ok={passwordChecks.length}>8+ characters</Check>
-                        <Check ok={passwordChecks.letter}>A letter</Check>
-                        <Check ok={passwordChecks.number}>A number</Check>
-                        <Check ok={passwordChecks.symbol}>A symbol (optional)</Check>
-                      </ul>
+                      <p className="text-[11px] text-muted-foreground">
+                        Strength is only guidance — matching passwords is enough to continue.
+                      </p>
                     </div>
                   )}
                 </div>
@@ -534,7 +529,6 @@ export default function AcceptInvite() {
                     placeholder="Repeat password"
                     className="bg-input border-border text-foreground mt-1.5 h-10"
                     autoComplete="new-password"
-                    minLength={8}
                     required
                   />
                   {confirm.length > 0 && (
@@ -558,7 +552,7 @@ export default function AcceptInvite() {
                 <Button
                   type="submit"
                   className="w-full h-11 font-semibold bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 transition-all"
-                  disabled={submitting || !passwordOk || !phoneValid || !fullName.trim()}
+                  disabled={submitting || !passwordOk || !fullName.trim()}
                 >
                   {submitting ? (
                     <>
@@ -581,7 +575,7 @@ export default function AcceptInvite() {
         </div>
 
         <p className="text-xs text-muted-foreground/70 text-center mt-5">
-          This link is single-use and expires once accepted.
+          This link is single-use and remains active until accepted or revoked.
         </p>
       </div>
     </div>

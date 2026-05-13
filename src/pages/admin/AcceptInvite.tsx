@@ -30,6 +30,8 @@ type ValidationState =
   | { status: "valid"; role: string; expiresAt: string }
   | { status: "error"; code: ErrorCode; message: string };
 
+type InviteFailure = { message: string; code?: string; status?: number };
+
 const FALLBACK_INVITE: ValidationState = { status: "valid", role: "staff", expiresAt: "" };
 
 const ERROR_META: Record<
@@ -99,6 +101,34 @@ function formatExpiry(iso: string): string {
   if (days >= 1) return `expires in ${days} day${days === 1 ? "" : "s"}`;
   if (hours >= 1) return `expires in ${hours} hour${hours === 1 ? "" : "s"}`;
   return "expires soon";
+}
+
+async function sha256Hex(input: string): Promise<string> {
+  const bytes = new TextEncoder().encode(input);
+  const hash = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(hash)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function readInviteFailure(error: unknown, fallback: string): Promise<InviteFailure> {
+  const err = error as { message?: string; context?: Response };
+  const failure: InviteFailure = { message: err.message || fallback, status: err.context?.status };
+  try {
+    const body = err.context && typeof err.context.json === "function" ? await err.context.json() : null;
+    if (body?.error) failure.message = body.error;
+    if (body?.code) failure.code = body.code;
+  } catch {
+    /* ignore */
+  }
+  return failure;
+}
+
+function canFallbackToDirectSignup(failure: InviteFailure): boolean {
+  return Boolean(
+    (failure.status && failure.status >= 500) ||
+      failure.code === "create_failed" ||
+      failure.code === "lookup_failed" ||
+      failure.code === "role_failed",
+  );
 }
 
 // /admin/accept-invite?token=...&email=...
@@ -203,6 +233,53 @@ export default function AcceptInvite() {
 
   const passwordOk = password.length > 0 && passwordChecks.match;
 
+  const completeActivationSession = async () => {
+    const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (signInErr || !signInData.user) {
+      setActivated(true);
+      setProfileSaved(false);
+      toast.success("Account activated. You can sign in with your new password.");
+      return;
+    }
+
+    const updates: Record<string, string | null> = { full_name: fullName.trim() };
+    if (phoneTrimmed.length > 0) updates.phone = phoneTrimmed;
+
+    const { error: profileErr } = await supabase
+      .from("admin_profiles")
+      .update(updates as never)
+      .eq("id", signInData.user.id);
+
+    setActivated(true);
+    setProfileSaved(!profileErr);
+    if (profileErr) {
+      toast.warning("Account activated, but we couldn't save your phone. You can add it later in Profile.");
+    } else {
+      toast.success("Welcome to Elparaiso admin!");
+    }
+  };
+
+  const activateWithDirectSignup = async () => {
+    const tokenHash = await sha256Hex(token);
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: fullName.trim(),
+          phone: phoneTrimmed || null,
+          invitation_token_hash: tokenHash,
+        },
+      },
+    });
+    if (error) throw error;
+    await completeActivationSession();
+  };
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName.trim()) return toast.error("Please enter your full name.");
@@ -220,53 +297,16 @@ export default function AcceptInvite() {
         },
       });
       if (error) {
-        const ctx: any = (error as any).context;
-        let message = error.message || "Failed to accept invitation";
-        try {
-          const body = ctx && typeof ctx.json === "function" ? await ctx.json() : null;
-          if (body?.error) message = body.error;
-        } catch {
-          /* ignore */
+        const failure = await readInviteFailure(error, "Failed to accept invitation");
+        if (canFallbackToDirectSignup(failure)) {
+          await activateWithDirectSignup();
+          return;
         }
-        throw new Error(message);
+        throw new Error(failure.message);
       }
       const payload = data as { ok?: boolean; error?: string } | null;
       if (!payload?.ok) throw new Error(payload?.error ?? "Failed to accept invitation");
-
-      // Sign in immediately so we can persist the phone via RLS-protected update.
-      const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (signInErr || !signInData.user) {
-        // Auth user exists but auto sign-in failed — surface the activation
-        // confirmation anyway so the user knows the account is created.
-        setActivated(true);
-        setProfileSaved(false);
-        toast.success("Account activated. You can sign in with your new password.");
-        return;
-      }
-
-      // Persist the additional profile fields. full_name is already written by
-      // the handle_new_user trigger using the value we passed to the edge fn.
-      const updates: Record<string, string | null> = {
-        full_name: fullName.trim(),
-      };
-      if (phoneTrimmed.length > 0) updates.phone = phoneTrimmed;
-
-      const { error: profileErr } = await supabase
-        .from("admin_profiles")
-        .update(updates as never)
-        .eq("id", signInData.user.id);
-
-      setActivated(true);
-      setProfileSaved(!profileErr);
-      if (profileErr) {
-        toast.warning("Account activated, but we couldn't save your phone. You can add it later in Profile.");
-      } else {
-        toast.success("Welcome to Elparaiso admin!");
-      }
+      await completeActivationSession();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to accept invitation";
       toast.error(msg);

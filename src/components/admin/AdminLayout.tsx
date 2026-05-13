@@ -4,7 +4,7 @@ import {
   LayoutDashboard, UtensilsCrossed, CalendarCheck, PartyPopper,
   Images, MessageSquare, Settings, Search, Users, Menu, X,
   LogOut, Star, Package, Sliders, ScrollText, BarChart3,
-  ExternalLink, ChevronDown, UserCog,
+  ExternalLink, ChevronDown, UserCog, Tag,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +35,7 @@ const navSections = [
     label: "Content",
     items: [
       { to: "/admin/menu", label: "Menu", icon: UtensilsCrossed },
+      { to: "/admin/pricing", label: "Pricing", icon: Tag },
       { to: "/admin/events", label: "Events & Offers", icon: PartyPopper },
       { to: "/admin/gallery", label: "Gallery", icon: Images },
       { to: "/admin/testimonials", label: "Testimonials", icon: Star },

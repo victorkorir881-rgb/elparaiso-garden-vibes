@@ -6,6 +6,19 @@ const ADMIN_ROLES = ["super_admin", "admin", "manager", "staff"];
 // Routes inside /admin that must remain reachable by unauthenticated users.
 const PUBLIC_ADMIN_PATHS = new Set(["/admin/login", "/admin/accept-invite"]);
 
+// In-memory cache so tab switches inside /admin don't re-hit Supabase
+// (getSession + admin_roles query) on every navigation. Keyed by user id,
+// short TTL so role changes still take effect quickly.
+const ROLE_CACHE_TTL_MS = 60_000;
+let roleCache: { userId: string; role: string; expires: number } | null = null;
+
+if (typeof window !== "undefined") {
+  // Invalidate on auth changes so sign-out / role swap is picked up immediately.
+  supabase.auth.onAuthStateChange(() => {
+    roleCache = null;
+  });
+}
+
 /**
  * Route-level guard for the entire /admin/* tree.
  *
@@ -24,15 +37,24 @@ export const Route = createFileRoute("/admin")({
 
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
+      roleCache = null;
       throw redirect({ to: "/admin/login" });
     }
 
-    const { data: roles } = await supabase
-      .from("admin_roles")
-      .select("role")
-      .eq("user_id", session.user.id);
+    const userId = session.user.id;
+    const now = Date.now();
+    let role: string;
+    if (roleCache && roleCache.userId === userId && roleCache.expires > now) {
+      role = roleCache.role;
+    } else {
+      const { data: roles } = await supabase
+        .from("admin_roles")
+        .select("role")
+        .eq("user_id", userId);
+      role = roles?.[0]?.role ?? "user";
+      roleCache = { userId, role, expires: now + ROLE_CACHE_TTL_MS };
+    }
 
-    const role = roles?.[0]?.role ?? "user";
     if (!ADMIN_ROLES.includes(role)) {
       // Non-admins are bounced to the public homepage — no admin trace.
       throw redirect({ to: "/" });

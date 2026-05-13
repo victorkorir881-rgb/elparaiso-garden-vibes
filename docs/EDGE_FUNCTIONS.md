@@ -159,6 +159,9 @@ functions. The most relevant ones:
 |---|---|
 | `0001_*` … `0014_*` | Core schema (users, orders, payments, reservations) |
 | `0015_admin_invitations.sql` | `admin-invite-user`, `admin-accept-invite` |
+| `0033_invitation_revocation.sql` | Adds `revoked_at` / `revoked_by` to invitations |
+| `0034_invite_acceptance_no_expiry_limit.sql` | Drops the hard expiry blocker on accept |
+| `0035_invite_acceptance_service_role_path.sql` | **Required.** Lets the edge function bypass the trigger's invite re-check so acceptance no longer fails with `Database error creating new user`. Pair with the latest `admin-accept-invite` deploy. |
 
 ### Apply migrations
 ```bash
@@ -169,7 +172,31 @@ bash sql/_check.sh
 supabase db push
 # or, if you keep raw .sql files:
 psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f sql/0015_admin_invitations.sql
+psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f sql/0035_invite_acceptance_service_role_path.sql
 ```
+
+### Invite acceptance contract (`admin-accept-invite`)
+
+The edge function runs as the service role and is the single source of truth
+for invitation state. On a successful POST it:
+
+1. Looks up the invitation by `token_hash` + `email` (case-insensitive) and
+   rejects `accepted_at` / `revoked_at` rows with a typed error code.
+2. Calls `auth.admin.createUser` with `email_confirm: true` and metadata
+   `{ full_name, phone, bypass_invite_check: true, invitation_token_hash }`.
+3. The `handle_new_user` trigger sees `bypass_invite_check` and only creates
+   the `admin_profiles` row — it does **not** re-validate the invite.
+4. The function then writes `admin_roles` (invited role), stamps
+   `admin_invitations.accepted_at` / `accepted_by`, persists `phone` on
+   `admin_profiles`, and inserts an `invite_accepted` audit row.
+5. If role assignment fails the half-created auth user is deleted so the
+   invite can be retried.
+
+Error codes returned to the client: `invalid`, `used`, `revoked`,
+`weak_password`, `email_exists`, `role_failed`, `lookup_failed`,
+`create_failed`. The client (`src/pages/admin/AcceptInvite.tsx`) surfaces
+these as toast messages.
+
 
 ---
 

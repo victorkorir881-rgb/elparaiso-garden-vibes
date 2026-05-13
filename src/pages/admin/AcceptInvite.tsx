@@ -211,7 +211,13 @@ export default function AcceptInvite() {
     setSubmitting(true);
     try {
       const { data, error } = await supabase.functions.invoke("admin-accept-invite", {
-        body: { token, email, password, fullName: fullName.trim() },
+        body: {
+          token,
+          email,
+          password,
+          fullName: fullName.trim(),
+          phone: phoneTrimmed,
+        },
       });
       if (error) {
         const ctx: any = (error as any).context;

@@ -23,8 +23,8 @@ export const Route = createRootRoute({
       { name: "twitter:image", content: siteUrl("/og-image.jpg") },
     ],
     links: [
-      { rel: "icon", href: "/favicon.ico" },
-      { rel: "apple-touch-icon", href: "/icon-192.png" },
+      { rel: "icon", type: "image/png", href: "/logo.png" },
+      { rel: "apple-touch-icon", href: "/logo.png" },
     ],
   }),
   component: RootComponent,
@@ -45,6 +45,7 @@ function RootComponent() {
 function NotFoundComponent() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background text-foreground gap-4 px-6 text-center">
+      <img src="/logo.png" alt="Elparaiso Garden Kisii logo" className="w-20 h-20 rounded-full object-cover bg-white border border-primary/20 mb-2" />
       <h1 className="text-5xl font-display font-bold text-primary">404</h1>
       <p className="text-xl text-foreground">Page not found</p>
       <p className="text-sm text-muted-foreground max-w-md">
@@ -63,6 +64,7 @@ function NotFoundComponent() {
 function ErrorComponent({ error }: { error: Error }) {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background text-foreground gap-4 px-6 text-center">
+      <img src="/logo.png" alt="Elparaiso Garden Kisii logo" className="w-20 h-20 rounded-full object-cover bg-white border border-primary/20 mb-2" />
       <h1 className="text-4xl font-display font-bold text-destructive">Something went wrong</h1>
       <p className="text-sm text-muted-foreground max-w-lg">
         {error?.message ?? "An unexpected error occurred. Please try again."}

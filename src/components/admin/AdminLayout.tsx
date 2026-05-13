@@ -74,6 +74,26 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
   }, [isAuthenticated, router]);
 
+  // Auto-close mobile sidebar whenever the route changes.
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location]);
+
+  // Lock body scroll while the mobile sidebar is open and close it on Escape.
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSidebarOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [sidebarOpen]);
+
   // Auth context skips admin role/profile lookups on the customer site to keep
   // those requests off the customer's network panel. Now that we're inside
   // the admin shell, refresh once to load the real role + profile.

@@ -11,7 +11,6 @@ import { useAuth } from "@/lib/auth";
 type ProfileRow = {
   id: string;
   full_name: string;
-  email: string | null;
   phone: string | null;
   on_duty: boolean;
   is_active: boolean;
@@ -36,17 +35,18 @@ export default function AdminProfile() {
       const [profileRes, { data: authData }] = await Promise.all([
         supabase
           .from("admin_profiles")
-          .select("id, full_name, email, phone, on_duty, is_active")
+          .select("id, full_name, phone, on_duty, is_active")
           .eq("id", user.id)
           .maybeSingle(),
         supabase.auth.getUser(),
       ]);
       const profile = (profileRes.data as ProfileRow | null) ?? null;
+      const currentEmail = authData?.user?.email ?? "";
       setFullName(profile?.full_name ?? user.name ?? "");
-      setEmail(profile?.email ?? authData?.user?.email ?? "");
+      setEmail(currentEmail);
       setPhone(profile?.phone ?? "");
       setOnDuty(!!profile?.on_duty);
-      setAuthEmail(authData?.user?.email ?? "");
+      setAuthEmail(currentEmail);
       setLoading(false);
     })();
   }, [user?.id, user?.name]);
@@ -68,7 +68,6 @@ export default function AdminProfile() {
         .from("admin_profiles")
         .update({
           full_name: fullName.trim(),
-          email: email.trim().toLowerCase(),
           phone: phone.trim() || null,
         } as never)
         .eq("id", user.id);
@@ -138,7 +137,7 @@ export default function AdminProfile() {
             <div>
               <div className="font-medium text-foreground">On-duty for SMS alerts</div>
               <div className="text-xs text-muted-foreground mt-0.5">
-                When on, your phone receives a text every time a new paid order comes in.
+                When on, your phone receives a text every time a new paid order comes in. If no admin is on duty, every active admin with a phone is texted as a fallback.
               </div>
             </div>
           </div>

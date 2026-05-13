@@ -179,7 +179,8 @@ Deno.serve(async (req) => {
       if (error || !data) return new Response(JSON.stringify({ error: "record_not_found" }), { status: 404, headers: { ...corsHeaders, "content-type": "application/json" } });
 
       // Prefer phones of admins currently on-duty (set in admin profile).
-      // Fall back to ADMIN_NOTIFY_PHONES env var if no on-duty admin.
+      // If no admin is on-duty, fall back to ALL active admins with a phone,
+      // so a paid order is never missed. Final fallback: ADMIN_NOTIFY_PHONES env.
       const { data: onDutyAdmins } = await admin
         .from("admin_profiles")
         .select("phone")
@@ -192,12 +193,26 @@ Deno.serve(async (req) => {
         .filter((p): p is string => !!p);
 
       if (adminPhones.length === 0) {
+        const { data: allAdmins } = await admin
+          .from("admin_profiles")
+          .select("phone")
+          .eq("is_active", true)
+          .not("phone", "is", null);
+        adminPhones = (allAdmins ?? [])
+          .map((r: { phone: string | null }) => normalizeKePhone(r.phone ?? ""))
+          .filter((p): p is string => !!p);
+      }
+
+      if (adminPhones.length === 0) {
         const adminPhonesRaw = Deno.env.get("ADMIN_NOTIFY_PHONES") ?? "";
         adminPhones = adminPhonesRaw
           .split(",")
           .map((p) => normalizeKePhone(p.trim()))
           .filter((p): p is string => !!p);
       }
+
+      // De-duplicate
+      adminPhones = Array.from(new Set(adminPhones));
 
       if (adminPhones.length === 0) {
         return new Response(JSON.stringify({ skipped: "no_admin_phones" }), { status: 200, headers: { ...corsHeaders, "content-type": "application/json" } });

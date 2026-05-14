@@ -14,6 +14,7 @@ import { useRealtimeAdminSync } from "@/lib/use-realtime-admin-sync";
 import { toast } from "sonner";
 import NotificationCenter from "./NotificationCenter";
 import AdminInstallButton from "./AdminInstallButton";
+import { BrandLogo } from "@/components/BrandLogo";
 
 const navSections = [
   {
@@ -158,10 +159,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="flex flex-col h-full">
       <div className="px-5 h-16 flex items-center border-b border-border/60 shrink-0">
         <Link to="/" className="flex items-center gap-3 group">
-          <img
-            src="/logo.png"
-            alt="Elparaiso Garden Kisii logo"
-            className="w-9 h-9 rounded-xl object-cover bg-white shrink-0"
+          <BrandLogo
+            eager
+            className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-contain bg-white p-0.5 sm:p-1 shrink-0 border border-primary/20 text-xs sm:text-sm"
             style={{ boxShadow: "var(--shadow-gold)" }}
           />
           <div className="min-w-0">

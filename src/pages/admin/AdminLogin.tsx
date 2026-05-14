@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { useAuth, supabase } from "@/lib/auth";
 import { siteUrl } from "@/lib/site-url";
+import { BrandLogo } from "@/components/BrandLogo";
 
 export default function AdminLogin() {
   const navigate = useNavigate();
@@ -89,7 +90,7 @@ export default function AdminLogin() {
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <img src="/logo.png" alt="Elparaiso Garden Kisii logo" className="w-20 h-20 rounded-full object-cover bg-white mx-auto mb-4 border border-primary/20" />
+          <BrandLogo eager className="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-contain bg-white p-1 sm:p-1.5 mx-auto mb-4 border border-primary/20 text-base sm:text-lg" />
           <h1 className="text-2xl font-bold text-foreground">Admin Panel</h1>
           <p className="text-muted-foreground text-sm mt-1">Elparaiso Garden Kisii</p>
         </div>

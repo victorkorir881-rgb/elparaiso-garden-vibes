@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { BrandLogo } from "@/components/BrandLogo";
 
 function GoogleIcon({ className }: { className?: string }) {
   return (
@@ -116,7 +117,7 @@ export default function CustomerLoginPage() {
         />
         <div className="max-w-md mx-auto">
           <div className="text-center mb-8">
-            <img src="/logo.png" alt="Elparaiso Garden Kisii logo" className="w-20 h-20 mx-auto mb-4 rounded-full object-cover bg-white border border-primary/20" />
+            <BrandLogo eager className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 rounded-full object-contain bg-white p-1 sm:p-1.5 border border-primary/20 text-base sm:text-lg" />
             <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full border border-primary/30 bg-primary/5 text-xs font-medium uppercase tracking-[0.18em] text-primary">
               <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
               Customer account

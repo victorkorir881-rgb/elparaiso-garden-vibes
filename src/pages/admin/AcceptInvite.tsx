@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { BrandLogo } from "@/components/BrandLogo";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -339,10 +340,9 @@ export default function AcceptInvite() {
           <div className="inline-flex items-center justify-center mb-4">
             <div className="relative">
               <div className="absolute inset-0 rounded-full bg-primary/30 blur-xl" />
-              <img
-                src="/logo.png"
-                alt="Elparaiso Garden Kisii logo"
-                className="relative w-20 h-20 rounded-full object-cover bg-white border border-primary/30 shadow-lg"
+              <BrandLogo
+                eager
+                className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-full object-contain bg-white p-1 sm:p-1.5 border border-primary/30 shadow-lg text-base sm:text-lg"
               />
             </div>
           </div>

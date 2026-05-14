@@ -8,6 +8,13 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@
 import { Button } from "@/components/ui/button";
 import { TrendingUp, ShoppingCart, CalendarCheck, DollarSign, AlertTriangle, CheckCircle2, Download } from "lucide-react";
 import { downloadCsv } from "@/lib/csv-export";
+import { useIsMobile } from "@/hooks/useMobile";
+
+const compactKsh = (v: number) => {
+  if (v >= 1_000_000) return `KES ${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `KES ${(v / 1_000).toFixed(1)}k`;
+  return `KES ${v}`;
+};
 
 type Range = 7 | 14 | 30 | 90;
 
@@ -38,6 +45,7 @@ const KSH = new Intl.NumberFormat("en-KE", { style: "currency", currency: "KES",
 
 export default function AdminAnalytics() {
   const [range, setRange] = useState<Range>(30);
+  const isMobile = useIsMobile();
   const { data: orders = [], isLoading: lo } = useOrders({});
   const { data: reservations = [], isLoading: lr } = useReservations({});
   const { data: menuItems = [] } = useMenuItems({});
@@ -192,37 +200,69 @@ export default function AdminAnalytics() {
         ))}
       </div>
 
-      <div className="bg-card border border-border rounded-xl p-4">
+      <div className="bg-card border border-border rounded-xl p-3 sm:p-4">
         <h2 className="text-sm font-semibold text-foreground mb-4">Orders &amp; Revenue per Day</h2>
-        <div className="h-72">
+        <div className="h-64 sm:h-72 -ml-2 sm:ml-0">
           <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={daily}>
+            <LineChart data={daily} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis dataKey="date" stroke="#94a3b8" fontSize={11} />
-              <YAxis yAxisId="left" stroke="#94a3b8" fontSize={11} />
-              <YAxis yAxisId="right" orientation="right" stroke="#94a3b8" fontSize={11} />
-              <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, color: "#f1f5f9" }} />
-              <Legend wrapperStyle={{ color: "#f1f5f9" }} />
-              <Line yAxisId="left" type="monotone" dataKey="orders" stroke="#38bdf8" strokeWidth={2} dot={{ r: 3, fill: "#38bdf8" }} activeDot={{ r: 5 }} />
-              <Line yAxisId="right" type="monotone" dataKey="revenue" stroke="#22c55e" strokeWidth={2} dot={{ r: 3, fill: "#22c55e" }} activeDot={{ r: 5 }} />
+              <XAxis
+                dataKey="date"
+                stroke="#94a3b8"
+                fontSize={isMobile ? 9 : 11}
+                interval={isMobile ? Math.max(0, Math.floor(daily.length / 5) - 1) : "preserveStartEnd"}
+                tickMargin={4}
+              />
+              <YAxis
+                yAxisId="left"
+                stroke="#38bdf8"
+                fontSize={isMobile ? 9 : 11}
+                width={isMobile ? 24 : 36}
+                allowDecimals={false}
+              />
+              <YAxis
+                yAxisId="right"
+                orientation="right"
+                stroke="#22c55e"
+                fontSize={isMobile ? 9 : 11}
+                width={isMobile ? 40 : 56}
+                tickFormatter={(v) => (isMobile ? compactKsh(Number(v)).replace("KES ", "") : KSH.format(Number(v)))}
+              />
+              <Tooltip
+                contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, color: "#f1f5f9", fontSize: 12 }}
+                formatter={(value: number, name: string) =>
+                  name === "revenue" ? [KSH.format(Number(value)), "Revenue"] : [value, "Orders"]
+                }
+                wrapperStyle={{ zIndex: 10 }}
+              />
+              <Legend wrapperStyle={{ color: "#f1f5f9", fontSize: 12 }} iconSize={10} />
+              <Line yAxisId="left" type="monotone" dataKey="orders" stroke="#38bdf8" strokeWidth={2} dot={{ r: isMobile ? 2 : 3, fill: "#38bdf8" }} activeDot={{ r: 5 }} />
+              <Line yAxisId="right" type="monotone" dataKey="revenue" stroke="#22c55e" strokeWidth={2} dot={{ r: isMobile ? 2 : 3, fill: "#22c55e" }} activeDot={{ r: 5 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-card border border-border rounded-xl p-4">
+        <div className="bg-card border border-border rounded-xl p-3 sm:p-4">
           <h2 className="text-sm font-semibold text-foreground mb-4">Top 10 Menu Items</h2>
-          <div className="h-80">
+          <div className="h-80 -ml-2 sm:ml-0">
             {topItems.length === 0 ? (
               <div className="h-full flex items-center justify-center text-sm text-muted-foreground">No order data in range</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={topItems} layout="vertical" margin={{ left: 24 }}>
+                <BarChart data={topItems} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                  <XAxis type="number" stroke="#94a3b8" fontSize={11} />
-                  <YAxis type="category" dataKey="name" stroke="#94a3b8" fontSize={11} width={120} />
-                  <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, color: "#f1f5f9" }} cursor={{ fill: "rgba(56,189,248,0.08)" }} />
+                  <XAxis type="number" stroke="#94a3b8" fontSize={isMobile ? 9 : 11} allowDecimals={false} />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    stroke="#94a3b8"
+                    fontSize={isMobile ? 10 : 11}
+                    width={isMobile ? 88 : 120}
+                    tickFormatter={(v: string) => (isMobile && v.length > 12 ? `${v.slice(0, 11)}…` : v)}
+                  />
+                  <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, color: "#f1f5f9", fontSize: 12 }} cursor={{ fill: "rgba(56,189,248,0.08)" }} />
                   <Bar dataKey="qty" fill="#38bdf8" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -230,16 +270,22 @@ export default function AdminAnalytics() {
           </div>
         </div>
 
-        <div className="bg-card border border-border rounded-xl p-4">
+        <div className="bg-card border border-border rounded-xl p-3 sm:p-4">
           <h2 className="text-sm font-semibold text-foreground mb-4">Peak Hours</h2>
-          <div className="h-80">
+          <div className="h-80 -ml-2 sm:ml-0">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={peakHours}>
+              <BarChart data={peakHours} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis dataKey="hour" stroke="#94a3b8" fontSize={10} interval={1} />
-                <YAxis stroke="#94a3b8" fontSize={11} />
-                <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, color: "#f1f5f9" }} cursor={{ fill: "rgba(56,189,248,0.08)" }} />
-                <Legend wrapperStyle={{ color: "#f1f5f9" }} />
+                <XAxis
+                  dataKey="hour"
+                  stroke="#94a3b8"
+                  fontSize={isMobile ? 9 : 10}
+                  interval={isMobile ? 3 : 1}
+                  tickFormatter={(v: string) => (isMobile ? v.replace(":00", "") : v)}
+                />
+                <YAxis stroke="#94a3b8" fontSize={isMobile ? 9 : 11} width={isMobile ? 24 : 36} allowDecimals={false} />
+                <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, color: "#f1f5f9", fontSize: 12 }} cursor={{ fill: "rgba(56,189,248,0.08)" }} />
+                <Legend wrapperStyle={{ color: "#f1f5f9", fontSize: 12 }} iconSize={10} />
                 <Bar dataKey="orders" stackId="a" fill="#38bdf8" />
                 <Bar dataKey="reservations" stackId="a" fill="#a78bfa" />
               </BarChart>

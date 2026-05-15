@@ -583,10 +583,15 @@ export function useCreateOrder() {
         .select("id, order_number")
         .single();
       if (error) throw error;
-      // Order confirmation email/SMS are sent after a successful M-Pesa payment
-      // (see supabase/functions/mpesa-callback/index.ts), not at order creation.
+      const newId = (data?.id ?? id) as string | undefined;
+      // Notify on-duty admins/staff via SMS as soon as an order is placed
+      // (covers cash orders; M-Pesa callback also fires this — 5-min idempotency
+      // in the send-sms function dedupes so admins get a single SMS).
+      if (newId) {
+        fireTransactionalSms({ template: "admin_new_order", recordId: newId });
+      }
       return {
-        id: data?.id ?? id,
+        id: newId,
         order_number: data?.order_number ?? input.order_number,
       } as { id: string | undefined; order_number: string };
     },

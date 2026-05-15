@@ -11,7 +11,8 @@ export type SmsTemplate =
   | "reservation_confirmation"
   | "order_confirmation"
   | "order_status_update"
-  | "order_payment_receipt";
+  | "order_payment_receipt"
+  | "admin_new_order";
 
 export interface SendTransactionalSmsArgs {
   template: SmsTemplate;

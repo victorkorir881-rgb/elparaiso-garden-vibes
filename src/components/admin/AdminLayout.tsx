@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import NotificationCenter from "./NotificationCenter";
 import AdminInstallButton from "./AdminInstallButton";
 import { BrandLogo } from "@/components/BrandLogo";
+import { canSeeNavItem, canAccessAdminPath } from "@/lib/permissions";
 
 const navSections = [
   {
@@ -67,14 +68,29 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const { data: unreadCount } = useUnreadMessageCount();
   useRealtimeAdminSync();
 
+  // Filter nav by role — RLS is the backstop, this just hides what the
+  // user can't access from the sidebar.
+  const visibleSections = useMemo(() => {
+    return navSections
+      .map((section) => ({
+        ...section,
+        items: section.items.filter((item) => canSeeNavItem(user?.role, item.to)),
+      }))
+      .filter((section) => section.items.length > 0);
+  }, [user?.role]);
+  const visibleItems = useMemo(
+    () => visibleSections.flatMap((s) => s.items),
+    [visibleSections],
+  );
+
   // Eagerly preload every admin route chunk + loader data the moment the
   // shell mounts so tab switches are instant (no chunk fetch, no skeleton).
   useEffect(() => {
     if (!isAuthenticated) return;
-    for (const item of allItems) {
+    for (const item of visibleItems) {
       void router.preloadRoute({ to: item.to });
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, router, visibleItems]);
 
   // Auto-close mobile sidebar whenever the route changes.
   useEffect(() => {
@@ -113,8 +129,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     exact ? location === href : location === href || location.startsWith(href + "/");
 
   const currentItem = useMemo(
-    () => [...allItems].sort((a, b) => b.to.length - a.to.length).find((i) => isActive(i.to, i.exact)),
-    [location]
+    () => [...visibleItems].sort((a, b) => b.to.length - a.to.length).find((i) => isActive(i.to, i.exact)),
+    [location, visibleItems]
   );
 
   if (loading || !isAuthenticated) {
@@ -149,6 +165,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     );
   }
 
+  // Per-route role check (RLS is the backstop; this hides the UI surface).
+  if (!canAccessAdminPath(user?.role, location)) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 px-6 text-center">
+        <div className="text-foreground font-semibold text-lg">Access Denied</div>
+        <p className="text-muted-foreground text-sm max-w-sm">
+          Your role (<span className="capitalize">{user?.role?.replace("_", " ")}</span>) doesn't have access to this section. Contact a super admin if you need permission.
+        </p>
+        <Link to="/admin"><Button variant="outline">Back to Dashboard</Button></Link>
+      </div>
+    );
+  }
+
   const handleLogout = async () => {
     await signOut();
     navigate({ to: "/admin/login" });
@@ -172,7 +201,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </div>
 
       <nav className="flex-1 px-3 py-4 overflow-y-auto">
-        {navSections.map((section, idx) => (
+        {visibleSections.map((section, idx) => (
           <div key={section.label} className={idx > 0 ? "mt-5" : ""}>
             <div className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
               {section.label}

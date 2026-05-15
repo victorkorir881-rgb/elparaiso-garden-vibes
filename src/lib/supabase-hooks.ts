@@ -1040,9 +1040,14 @@ export function useMyOrders(userId: string | null | undefined) {
   return useQuery({
     queryKey: ["orders", "mine", userId ?? "anon"],
     queryFn: async () => {
+      if (!userId) return [];
+      // Strictly scope to orders owned by the current user.
+      // RLS already enforces this, but we filter explicitly so we never
+      // fall back to email-matched rows that belong to another account.
       const { data, error } = await supabase
         .from("orders")
         .select("*")
+        .eq("user_id" as any, userId)
         .order("created_at", { ascending: false })
         .limit(100);
       if (error) throw error;

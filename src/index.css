@@ -325,3 +325,12 @@ img, video { max-width: 100%; height: auto; }
 
 .admin-shell .tabular-nums,
 .admin-shell [data-tabular] { font-variant-numeric: tabular-nums; }
+
+/* Force all Lucide icons to render in brand yellow.
+   Lucide-react SVGs always carry the `lucide` class and use `currentColor`
+   for stroke/fill, so this single rule recolors every icon site-wide
+   (cards, buttons, badges, nav, admin) without touching individual files. */
+svg.lucide {
+  color: #facc15; /* tailwind yellow-400 */
+}
+

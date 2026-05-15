@@ -24,7 +24,13 @@ import {
   ArrowRight,
 } from "lucide-react";
 
-type ErrorCode = "invalid" | "used" | "revoked" | "expired" | "missing" | "network";
+type ErrorCode =
+  | "invalid"
+  | "used"
+  | "revoked"
+  | "expired"
+  | "missing"
+  | "network";
 
 type ValidationState =
   | { status: "loading" }
@@ -33,7 +39,11 @@ type ValidationState =
 
 type InviteFailure = { message: string; code?: string; status?: number };
 
-const FALLBACK_INVITE: ValidationState = { status: "valid", role: "staff", expiresAt: "" };
+const FALLBACK_INVITE: ValidationState = {
+  status: "valid",
+  role: "staff",
+  expiresAt: "",
+};
 
 const ERROR_META: Record<
   ErrorCode,
@@ -104,32 +114,26 @@ function formatExpiry(iso: string): string {
   return "expires soon";
 }
 
-async function sha256Hex(input: string): Promise<string> {
-  const bytes = new TextEncoder().encode(input);
-  const hash = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(hash)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-async function readInviteFailure(error: unknown, fallback: string): Promise<InviteFailure> {
+async function readInviteFailure(
+  error: unknown,
+  fallback: string,
+): Promise<InviteFailure> {
   const err = error as { message?: string; context?: Response };
-  const failure: InviteFailure = { message: err.message || fallback, status: err.context?.status };
+  const failure: InviteFailure = {
+    message: err.message || fallback,
+    status: err.context?.status,
+  };
   try {
-    const body = err.context && typeof err.context.json === "function" ? await err.context.json() : null;
+    const body =
+      err.context && typeof err.context.json === "function"
+        ? await err.context.json()
+        : null;
     if (body?.error) failure.message = body.error;
     if (body?.code) failure.code = body.code;
   } catch {
     /* ignore */
   }
   return failure;
-}
-
-function canFallbackToDirectSignup(failure: InviteFailure): boolean {
-  return Boolean(
-    (failure.status && failure.status >= 500) ||
-      failure.code === "create_failed" ||
-      failure.code === "lookup_failed" ||
-      failure.code === "role_failed",
-  );
 }
 
 // /admin/accept-invite?token=...&email=...
@@ -142,8 +146,18 @@ export default function AcceptInvite() {
   const token = params.get("token") ?? "";
   const email = (params.get("email") ?? "").toLowerCase();
 
-  const [validation, setValidation] = useState<ValidationState>(token && email ? { status: "loading" } : { status: "error", code: "missing", message: "This link is missing the token or email." });
-  const [verificationWarning, setVerificationWarning] = useState<string | null>(null);
+  const [validation, setValidation] = useState<ValidationState>(
+    token && email
+      ? { status: "loading" }
+      : {
+          status: "error",
+          code: "missing",
+          message: "This link is missing the token or email.",
+        },
+  );
+  const [verificationWarning, setVerificationWarning] = useState<string | null>(
+    null,
+  );
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
@@ -167,39 +181,62 @@ export default function AcceptInvite() {
     let cancelled = false;
     (async () => {
       try {
-        const { data, error } = await supabase.functions.invoke("admin-accept-invite", {
-          body: { token, email, validateOnly: true },
-        });
+        const { data, error } = await supabase.functions.invoke(
+          "admin-accept-invite",
+          {
+            body: { token, email, validateOnly: true },
+          },
+        );
         if (cancelled) return;
         if (error) {
           const ctx: any = (error as any).context;
           let code: any = "network";
           let message = error.message || "Could not verify invitation.";
           try {
-            const body = ctx && typeof ctx.json === "function" ? await ctx.json() : null;
+            const body =
+              ctx && typeof ctx.json === "function" ? await ctx.json() : null;
             if (body?.code) code = body.code;
             if (body?.error) message = body.error;
           } catch {
             /* ignore */
           }
-          if (code === "used" || code === "revoked" || code === "expired" || code === "invalid") {
+          if (
+            code === "used" ||
+            code === "revoked" ||
+            code === "expired" ||
+            code === "invalid"
+          ) {
             setValidation({ status: "error", code, message });
           } else {
-            setVerificationWarning("We couldn't pre-check this link, but you can still complete setup. The invite will be verified when you activate your account.");
+            setVerificationWarning(
+              "We couldn't pre-check this link, but you can still complete setup. The invite will be verified when you activate your account.",
+            );
             setValidation(FALLBACK_INVITE);
           }
           return;
         }
-        const payload = data as { ok?: boolean; role?: string; expiresAt?: string } | null;
+        const payload = data as {
+          ok?: boolean;
+          role?: string;
+          expiresAt?: string;
+        } | null;
         if (!payload?.ok || !payload.role) {
-          setVerificationWarning("We couldn't pre-check this link, but you can still complete setup. The invite will be verified when you activate your account.");
+          setVerificationWarning(
+            "We couldn't pre-check this link, but you can still complete setup. The invite will be verified when you activate your account.",
+          );
           setValidation(FALLBACK_INVITE);
           return;
         }
-        setValidation({ status: "valid", role: payload.role, expiresAt: payload.expiresAt ?? "" });
+        setValidation({
+          status: "valid",
+          role: payload.role,
+          expiresAt: payload.expiresAt ?? "",
+        });
       } catch (err) {
         if (cancelled) return;
-        setVerificationWarning("We couldn't pre-check this link, but you can still complete setup. The invite will be verified when you activate your account.");
+        setVerificationWarning(
+          "We couldn't pre-check this link, but you can still complete setup. The invite will be verified when you activate your account.",
+        );
         setValidation(FALLBACK_INVITE);
       }
     })();
@@ -225,29 +262,54 @@ export default function AcceptInvite() {
     Number(passwordChecks.symbol);
   const strength =
     strengthScore <= 1
-      ? { label: "Weak", color: "bg-destructive", text: "text-destructive", width: "w-1/4" }
+      ? {
+          label: "Weak",
+          color: "bg-destructive",
+          text: "text-destructive",
+          width: "w-1/4",
+        }
       : strengthScore === 2
-        ? { label: "Fair", color: "bg-amber-500", text: "text-amber-500", width: "w-2/4" }
+        ? {
+            label: "Fair",
+            color: "bg-amber-500",
+            text: "text-amber-500",
+            width: "w-2/4",
+          }
         : strengthScore === 3
-          ? { label: "Good", color: "bg-yellow-400", text: "text-yellow-500", width: "w-3/4" }
-          : { label: "Strong", color: "bg-emerald-500", text: "text-emerald-500", width: "w-full" };
+          ? {
+              label: "Good",
+              color: "bg-yellow-400",
+              text: "text-yellow-500",
+              width: "w-3/4",
+            }
+          : {
+              label: "Strong",
+              color: "bg-emerald-500",
+              text: "text-emerald-500",
+              width: "w-full",
+            };
 
   const passwordOk = password.length > 0 && passwordChecks.match;
 
   const completeActivationSession = async () => {
-    const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { data: signInData, error: signInErr } =
+      await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
     if (signInErr || !signInData.user) {
       setActivated(true);
       setProfileSaved(false);
-      toast.success("Account activated. You can sign in with your new password.");
+      toast.success(
+        "Account activated. You can sign in with your new password.",
+      );
       return;
     }
 
-    const updates: Record<string, string | null> = { full_name: fullName.trim() };
+    const updates: Record<string, string | null> = {
+      full_name: fullName.trim(),
+    };
     if (phoneTrimmed.length > 0) updates.phone = phoneTrimmed;
 
     const { error: profileErr } = await supabase
@@ -258,27 +320,12 @@ export default function AcceptInvite() {
     setActivated(true);
     setProfileSaved(!profileErr);
     if (profileErr) {
-      toast.warning("Account activated, but we couldn't save your phone. You can add it later in Profile.");
+      toast.warning(
+        "Account activated, but we couldn't save your phone. You can add it later in Profile.",
+      );
     } else {
       toast.success("Welcome to Elparaiso admin!");
     }
-  };
-
-  const activateWithDirectSignup = async () => {
-    const tokenHash = await sha256Hex(token);
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName.trim(),
-          phone: phoneTrimmed || null,
-          invitation_token_hash: tokenHash,
-        },
-      },
-    });
-    if (error) throw error;
-    await completeActivationSession();
   };
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -288,28 +335,32 @@ export default function AcceptInvite() {
     if (!passwordChecks.match) return toast.error("Passwords do not match.");
     setSubmitting(true);
     try {
-      const { data, error } = await supabase.functions.invoke("admin-accept-invite", {
-        body: {
-          token,
-          email,
-          password,
-          fullName: fullName.trim(),
-          phone: phoneTrimmed,
+      const { data, error } = await supabase.functions.invoke(
+        "admin-accept-invite",
+        {
+          body: {
+            token,
+            email,
+            password,
+            fullName: fullName.trim(),
+            phone: phoneTrimmed,
+          },
         },
-      });
+      );
       if (error) {
-        const failure = await readInviteFailure(error, "Failed to accept invitation");
-        if (canFallbackToDirectSignup(failure)) {
-          await activateWithDirectSignup();
-          return;
-        }
+        const failure = await readInviteFailure(
+          error,
+          "Failed to accept invitation",
+        );
         throw new Error(failure.message);
       }
       const payload = data as { ok?: boolean; error?: string } | null;
-      if (!payload?.ok) throw new Error(payload?.error ?? "Failed to accept invitation");
+      if (!payload?.ok)
+        throw new Error(payload?.error ?? "Failed to accept invitation");
       await completeActivationSession();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to accept invitation";
+      const msg =
+        err instanceof Error ? err.message : "Failed to accept invitation";
       toast.error(msg);
       setSubmitting(false);
     }
@@ -350,7 +401,8 @@ export default function AcceptInvite() {
             Welcome aboard
           </h1>
           <p className="text-muted-foreground text-sm mt-2 max-w-xs mx-auto">
-            You've been invited to join the Elparaiso admin team. Let's get your account set up.
+            You've been invited to join the Elparaiso admin team. Let's get your
+            account set up.
           </p>
         </div>
 
@@ -362,7 +414,9 @@ export default function AcceptInvite() {
                 <div className="absolute inset-0 rounded-full bg-primary/20 blur-md animate-pulse" />
                 <Loader2 className="relative w-7 h-7 animate-spin text-primary" />
               </div>
-              <p className="text-sm text-muted-foreground">Verifying your invitation…</p>
+              <p className="text-sm text-muted-foreground">
+                Verifying your invitation…
+              </p>
             </div>
           )}
 
@@ -377,7 +431,9 @@ export default function AcceptInvite() {
                   >
                     <Icon className={`w-7 h-7 ${meta.tone}`} />
                   </div>
-                  <h2 className="text-lg font-semibold text-foreground">{meta.title}</h2>
+                  <h2 className="text-lg font-semibold text-foreground">
+                    {meta.title}
+                  </h2>
                   <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
                     {meta.hint}
                   </p>
@@ -401,14 +457,22 @@ export default function AcceptInvite() {
                 <div className="mx-auto w-16 h-16 rounded-full bg-emerald-500/15 ring-1 ring-emerald-500/30 flex items-center justify-center mb-4 animate-in zoom-in duration-500">
                   <CheckCircle2 className="w-8 h-8 text-emerald-500" />
                 </div>
-                <h2 className="text-lg font-semibold text-foreground">You're all set</h2>
+                <h2 className="text-lg font-semibold text-foreground">
+                  You're all set
+                </h2>
                 <p className="text-sm text-muted-foreground mt-1.5">
-                  Your admin account has been created. Review your details below.
+                  Your admin account has been created. Review your details
+                  below.
                 </p>
               </div>
 
               <dl className="mt-6 rounded-xl border border-border bg-muted/20 divide-y divide-border overflow-hidden">
-                <SummaryRow icon={User} label="Full name" value={fullName.trim()} ok />
+                <SummaryRow
+                  icon={User}
+                  label="Full name"
+                  value={fullName.trim()}
+                  ok
+                />
                 <SummaryRow icon={Mail} label="Email" value={email} ok />
                 <SummaryRow
                   icon={Phone}
@@ -428,7 +492,8 @@ export default function AcceptInvite() {
               {!profileSaved && phoneTrimmed.length > 0 && (
                 <p className="mt-3 text-[11px] text-amber-500 flex items-start gap-1.5">
                   <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
-                  We couldn't save your phone right now. You can add it later from your Profile page.
+                  We couldn't save your phone right now. You can add it later
+                  from your Profile page.
                 </p>
               )}
 
@@ -450,7 +515,11 @@ export default function AcceptInvite() {
                 )}
               </Button>
               <p className="text-[11px] text-muted-foreground text-center mt-3">
-                Tip: bookmark <span className="font-mono text-foreground/80">/admin/login</span> on this device for faster access next time.
+                Tip: bookmark{" "}
+                <span className="font-mono text-foreground/80">
+                  /admin/login
+                </span>{" "}
+                on this device for faster access next time.
               </p>
             </div>
           )}
@@ -473,12 +542,16 @@ export default function AcceptInvite() {
                       </Badge>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                      {ROLE_DESCRIPTION[validation.role] ?? "Admin access to the dashboard."}
+                      {ROLE_DESCRIPTION[validation.role] ??
+                        "Admin access to the dashboard."}
                     </p>
                     {validation.expiresAt && (
                       <div className="flex items-center gap-1.5 mt-2 text-[11px] text-muted-foreground">
                         <Clock className="w-3 h-3" />
-                        <span>Suggested follow-up: {formatExpiry(validation.expiresAt)}</span>
+                        <span>
+                          Suggested follow-up:{" "}
+                          {formatExpiry(validation.expiresAt)}
+                        </span>
                       </div>
                     )}
                     {verificationWarning && (
@@ -504,7 +577,9 @@ export default function AcceptInvite() {
                 </div>
 
                 <div>
-                  <Label className="text-foreground text-xs font-medium">Full name</Label>
+                  <Label className="text-foreground text-xs font-medium">
+                    Full name
+                  </Label>
                   <Input
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
@@ -518,7 +593,10 @@ export default function AcceptInvite() {
                 <div>
                   <Label className="text-foreground text-xs font-medium flex items-center gap-1.5">
                     <Phone className="w-3.5 h-3.5 text-muted-foreground" />
-                    Phone <span className="text-muted-foreground font-normal">(optional)</span>
+                    Phone{" "}
+                    <span className="text-muted-foreground font-normal">
+                      (optional)
+                    </span>
                   </Label>
                   <Input
                     value={phone}
@@ -530,7 +608,8 @@ export default function AcceptInvite() {
                   />
                   {phone.length > 0 && (
                     <p className="mt-1.5 text-[11px] text-muted-foreground">
-                      We’ll save this exactly as entered so your team can reach you.
+                      We’ll save this exactly as entered so your team can reach
+                      you.
                     </p>
                   )}
                 </div>
@@ -556,19 +635,24 @@ export default function AcceptInvite() {
                             className={`h-full ${strength.color} ${strength.width} transition-all duration-300`}
                           />
                         </div>
-                        <span className={`text-[11px] font-medium ${strength.text}`}>
+                        <span
+                          className={`text-[11px] font-medium ${strength.text}`}
+                        >
                           {strength.label}
                         </span>
                       </div>
                       <p className="text-[11px] text-muted-foreground">
-                        Strength is only guidance — matching passwords is enough to continue.
+                        Strength is only guidance — matching passwords is enough
+                        to continue.
                       </p>
                     </div>
                   )}
                 </div>
 
                 <div>
-                  <Label className="text-foreground text-xs font-medium">Confirm password</Label>
+                  <Label className="text-foreground text-xs font-medium">
+                    Confirm password
+                  </Label>
                   <PasswordInput
                     value={confirm}
                     onChange={(e) => setConfirm(e.target.value)}
@@ -580,7 +664,9 @@ export default function AcceptInvite() {
                   {confirm.length > 0 && (
                     <p
                       className={`mt-1.5 text-[11px] flex items-center gap-1 ${
-                        passwordChecks.match ? "text-emerald-500" : "text-destructive"
+                        passwordChecks.match
+                          ? "text-emerald-500"
+                          : "text-destructive"
                       }`}
                     >
                       {passwordChecks.match ? (
@@ -588,7 +674,9 @@ export default function AcceptInvite() {
                       ) : (
                         <XCircle className="w-3 h-3" />
                       )}
-                      {passwordChecks.match ? "Passwords match" : "Passwords don't match yet"}
+                      {passwordChecks.match
+                        ? "Passwords match"
+                        : "Passwords don't match yet"}
                     </p>
                   )}
                 </div>
@@ -664,10 +752,14 @@ function SummaryRow({
         <Icon className="w-3.5 h-3.5 text-muted-foreground" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          {label}
+        </p>
         <p
           className={`text-sm truncate ${
-            muted ? "text-muted-foreground italic" : "text-foreground font-medium"
+            muted
+              ? "text-muted-foreground italic"
+              : "text-foreground font-medium"
           }`}
         >
           {value}

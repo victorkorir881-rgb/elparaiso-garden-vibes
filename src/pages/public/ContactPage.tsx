@@ -11,6 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { toast } from "sonner";
 import { useSettings, useSubmitContact } from "@/lib/supabase-hooks";
 import PublicLayout from "@/components/public/PublicLayout";
+import { toEmbedUrl } from "@/lib/maps-embed";
 
 const schema = z.object({
   name: z.string().min(2, "Name is required"),
@@ -51,10 +52,11 @@ export default function ContactPage() {
   const whatsapp = settings?.whatsapp || "";
   const address = settings?.address || "";
   const email = settings?.email || "";
-  const mapsEmbed = settings?.mapsEmbed || "";
+  const rawEmbed = settings?.mapsEmbed || "";
   const mapsLink =
     settings?.mapUrl ||
     (address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}` : "");
+  const mapsEmbed = toEmbedUrl(rawEmbed || mapsLink, address);
 
   return (
     <PublicLayout>

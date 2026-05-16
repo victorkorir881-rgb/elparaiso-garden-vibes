@@ -7,6 +7,7 @@ import PublicLayout from "@/components/public/PublicLayout";
 
 import { MenuItemImage } from "@/components/MenuItemImage";
 import { ScrollReveal } from "@/hooks/useScrollAnimation";
+import { toEmbedUrl } from "@/lib/maps-embed";
 
 const HERO_BG = "https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1600&q=80";
 
@@ -41,8 +42,9 @@ export default function HomePage() {
   const phone = settings?.phone ?? "0791 224513";
   const whatsapp = settings?.whatsapp ?? "254791224513";
   const address = settings?.address ?? "County Government Street, Kisii, Kenya";
-  const mapsEmbed = settings?.maps_embed ?? "";
+  const rawEmbed = settings?.maps_embed ?? "";
   const mapsLink = settings?.maps_link ?? "https://maps.google.com/?q=Kisii+Kenya";
+  const mapsEmbed = toEmbedUrl(rawEmbed || mapsLink, address);
 
   return (
     <PublicLayout>

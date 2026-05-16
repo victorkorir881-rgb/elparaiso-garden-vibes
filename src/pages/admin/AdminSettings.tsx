@@ -16,7 +16,7 @@ export default function AdminSettings() {
   const update = useUpdateSettings();
 
   const [form, setForm] = useState({
-    siteName: "", tagline: "", description: "", phone: "", phone2: "", email: "", address: "", city: "", mapUrl: "",
+    siteName: "", tagline: "", description: "", phone: "", phone2: "", email: "", address: "", city: "", mapUrl: "", mapsEmbed: "",
     whatsapp: "", facebook: "", instagram: "", twitter: "", tiktok: "", youtube: "",
     openingHours: {} as Record<string, { open: string; close: string; closed: boolean }>,
     enableReservations: true, enableGallery: true, enableEvents: true, enableTestimonials: true,
@@ -42,6 +42,7 @@ export default function AdminSettings() {
         address: settings.address ?? "",
         city: settings.city ?? "",
         mapUrl: settings.mapUrl ?? "",
+        mapsEmbed: settings.mapsEmbed ?? "",
         whatsapp: settings.whatsapp ?? "",
         facebook: settings.facebook ?? "",
         instagram: settings.instagram ?? "",
@@ -163,6 +164,11 @@ export default function AdminSettings() {
                 <Label className="text-foreground">Google Maps URL</Label>
                 <Input value={form.mapUrl} onChange={(e) => setForm((p) => ({ ...p, mapUrl: e.target.value }))} className="bg-input border-border text-foreground mt-1" placeholder="https://maps.google.com/..." />
               </div>
+            </div>
+            <div>
+              <Label className="text-foreground">Google Maps Embed URL (iframe src)</Label>
+              <Input value={form.mapsEmbed} onChange={(e) => setForm((p) => ({ ...p, mapsEmbed: e.target.value }))} className="bg-input border-border text-foreground mt-1" placeholder="https://www.google.com/maps/embed?pb=..." />
+              <p className="text-xs text-muted-foreground mt-1">Open Google Maps → Share → Embed a map → copy the URL inside src="...". Leave empty to show a fallback pin + link.</p>
             </div>
           </div>
         </TabsContent>

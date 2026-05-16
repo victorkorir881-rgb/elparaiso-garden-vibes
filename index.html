@@ -5,8 +5,68 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     <meta name="theme-color" content="#01301F" />
     <link rel="icon" type="image/png" href="/logo.png" />
-    <link rel="apple-touch-icon" href="/logo.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Elparaiso Garden Kisii</title>
+    <script>
+      // Wire up the correct manifest + iOS splash screens based on the
+      // current path. Customers (/) and admins (/admin/*) get distinct
+      // installable apps with their own theme + splash artwork.
+      (function () {
+        var isAdmin = location.pathname.indexOf('/admin') === 0;
+        var prefix = isAdmin ? 'admin' : 'customer';
+        var manifest = isAdmin ? '/manifest.webmanifest' : '/manifest-customer.webmanifest';
+        var theme = isAdmin ? '#01301F' : '#0b1410';
+
+        var mLink = document.createElement('link');
+        mLink.rel = 'manifest';
+        mLink.href = manifest;
+        document.head.appendChild(mLink);
+
+        var themeMeta = document.querySelector('meta[name="theme-color"]');
+        if (themeMeta) themeMeta.setAttribute('content', theme);
+
+        var appName = isAdmin ? 'Elparaiso Admin' : 'Elparaiso';
+        var titleMeta = document.createElement('meta');
+        titleMeta.name = 'apple-mobile-web-app-title';
+        titleMeta.content = appName;
+        document.head.appendChild(titleMeta);
+
+        // device width x height : (media query w/h + pixel ratio)
+        var splashes = [
+          { w: 1290, h: 2796, mw: 430, mh: 932, r: 3 },
+          { w: 1179, h: 2556, mw: 393, mh: 852, r: 3, name: 'iphone-15-pro' },
+          { w: 1170, h: 2532, mw: 390, mh: 844, r: 3, name: 'iphone-14' },
+          { w: 1125, h: 2436, mw: 375, mh: 812, r: 3, name: 'iphone-x' },
+          { w: 828,  h: 1792, mw: 414, mh: 896, r: 2, name: 'iphone-xr' },
+          { w: 750,  h: 1334, mw: 375, mh: 667, r: 2, name: 'iphone-8' },
+          { w: 1640, h: 2360, mw: 820, mh: 1180, r: 2, name: 'ipad-air' },
+          { w: 1536, h: 2048, mw: 768, mh: 1024, r: 2, name: 'ipad' }
+        ];
+        var fileNames = {
+          '1290x2796': 'iphone-15-pro-max',
+          '1179x2556': 'iphone-15-pro',
+          '1170x2532': 'iphone-14',
+          '1125x2436': 'iphone-x',
+          '828x1792':  'iphone-xr',
+          '750x1334':  'iphone-8',
+          '1640x2360': 'ipad-air',
+          '1536x2048': 'ipad'
+        };
+        splashes.forEach(function (s) {
+          var fname = fileNames[s.w + 'x' + s.h];
+          var link = document.createElement('link');
+          link.rel = 'apple-touch-startup-image';
+          link.href = '/splash/' + prefix + '-' + fname + '-' + s.w + 'x' + s.h + '.png';
+          link.media =
+            '(device-width: ' + s.mw + 'px) and (device-height: ' + s.mh + 'px) ' +
+            'and (-webkit-device-pixel-ratio: ' + s.r + ') and (orientation: portrait)';
+          document.head.appendChild(link);
+        });
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

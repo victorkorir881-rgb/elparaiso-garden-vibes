@@ -391,10 +391,7 @@ export default function AcceptInvite() {
           <div className="inline-flex items-center justify-center mb-4">
             <div className="relative">
               <div className="absolute inset-0 rounded-full bg-primary/30 blur-xl" />
-              <BrandLogo
-                eager
-                className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-full object-contain bg-white p-1 sm:p-1.5 border border-primary/30 shadow-lg text-base sm:text-lg"
-              />
+              <BrandLogo eager size="md" className="relative" />
             </div>
           </div>
           <h1 className="font-serif text-3xl font-bold text-foreground tracking-tight">

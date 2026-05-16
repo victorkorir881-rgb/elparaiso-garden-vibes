@@ -59,7 +59,7 @@ export default function AdminLogin() {
         if (error) toast.error(error);
         else navigate({ to: "/admin" });
       } else if (mode === "register") {
-        const { error } = await signUp(email, password, fullName);
+        const { error } = await signUp(email, password, fullName, "/admin");
         if (error) toast.error(error);
         else toast.success("Account created! Check your email to confirm, then sign in.");
       } else {
@@ -90,7 +90,7 @@ export default function AdminLogin() {
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <BrandLogo eager className="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-contain bg-white p-1 sm:p-1.5 mx-auto mb-4 border border-primary/20 text-base sm:text-lg" />
+          <BrandLogo eager size="md" className="mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-foreground">Admin Panel</h1>
           <p className="text-muted-foreground text-sm mt-1">Elparaiso Garden Kisii</p>
         </div>

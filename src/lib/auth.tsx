@@ -24,7 +24,7 @@ type AuthState = {
 type AuthContextType = AuthState & {
   error: string | null;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: string | null; needsEmailConfirmation: boolean }>;
+  signUp: (email: string, password: string, fullName: string, redirectPath?: string) => Promise<{ error: string | null; needsEmailConfirmation: boolean }>;
   signInWithGoogle: (redirectPath?: string) => Promise<{ error: string | null }>;
   resetPassword: (email: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
@@ -126,13 +126,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: null };
   }, []);
 
-  const signUp = useCallback(async (email: string, password: string, fullName: string) => {
+  const signUp = useCallback(async (email: string, password: string, fullName: string, redirectPath?: string) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: { full_name: fullName },
-        emailRedirectTo: siteUrl("/account"),
+        emailRedirectTo: siteUrl(redirectPath ?? "/account"),
       },
     });
     if (error) return { error: error.message, needsEmailConfirmation: false };

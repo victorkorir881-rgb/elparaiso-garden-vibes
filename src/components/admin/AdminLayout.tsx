@@ -190,7 +190,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <Link to="/" className="flex items-center gap-3 group">
           <BrandLogo
             eager
-            className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-contain bg-white p-0.5 sm:p-1 shrink-0 border border-primary/20 text-xs sm:text-sm"
+            size="nav"
             style={{ boxShadow: "var(--shadow-gold)" }}
           />
           <div className="min-w-0">

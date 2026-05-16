@@ -53,7 +53,7 @@ export default function ResetPassword() {
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <BrandLogo eager className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 rounded-full object-contain bg-white p-1 sm:p-1.5 border border-primary/20 text-base sm:text-lg" />
+          <BrandLogo eager size="md" className="mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-foreground">Set a new password</h1>
           <p className="text-muted-foreground text-sm mt-1">Choose a strong password you haven't used before.</p>
         </div>

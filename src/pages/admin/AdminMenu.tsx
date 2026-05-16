@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { BulkActionBar } from "@/components/admin/BulkActionBar";
 import { ImageUploadField } from "@/components/admin/ImageUploadField";
 import { MenuItemImage } from "@/components/MenuItemImage";
+import { MenuQrButton } from "@/components/admin/MenuQrButton";
 import { toast } from "sonner";
 import {
   useMenuCategories, useMenuItems,
@@ -117,7 +118,8 @@ export default function AdminMenu() {
           <h1 className="text-2xl font-bold text-foreground">Menu Manager</h1>
           <p className="text-muted-foreground text-sm mt-1">Manage categories and menu items</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <MenuQrButton />
           <Button variant="outline" size="sm" className="border-border text-foreground hover:bg-accent" onClick={() => { setEditCat({ id: "", name: "", description: "" }); setCatDialog(true); }}>
             <Plus className="w-4 h-4 mr-1" /> Category
           </Button>

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Phone, MapPin, Clock, CheckCircle } from "lucide-react";
+import { Phone, MapPin, Clock, CheckCircle, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -45,11 +45,16 @@ export default function ContactPage() {
     );
   };
 
-  const phone = settings?.phone ?? "0791 224513";
-  const whatsapp = settings?.whatsapp ?? "254791224513";
-  const address = settings?.address ?? "County Government Street, Kisii, Kenya";
-  const mapsEmbed = settings?.maps_embed ?? "";
-  const mapsLink = settings?.maps_link ?? "https://maps.google.com/?q=Kisii+Kenya";
+  // Public contact info comes ONLY from site_settings — never from admin user
+  // profiles or personal numbers. Fields are hidden if not configured.
+  const phone = settings?.phone || "";
+  const whatsapp = settings?.whatsapp || "";
+  const address = settings?.address || "";
+  const email = settings?.email || "";
+  const mapsEmbed = settings?.mapsEmbed || "";
+  const mapsLink =
+    settings?.mapUrl ||
+    (address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}` : "");
 
   return (
     <PublicLayout>
@@ -84,6 +89,15 @@ export default function ContactPage() {
                       <a href={`tel:${phone}`} className="text-muted-foreground text-sm hover:text-primary transition-colors">{phone}</a>
                     </div>
                   </div>
+                  {email && (
+                    <div className="flex items-start gap-3">
+                      <Mail className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                      <div>
+                        <div className="text-sm font-medium text-foreground">Email</div>
+                        <a href={`mailto:${email}`} className="text-muted-foreground text-sm hover:text-primary transition-colors break-all">{email}</a>
+                      </div>
+                    </div>
+                  )}
                   <div className="flex items-start gap-3">
                     <Clock className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                     <div>

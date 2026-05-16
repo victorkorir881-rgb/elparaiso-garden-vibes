@@ -13,7 +13,7 @@ export default function NotFound() {
       <Card className="w-full max-w-lg mx-4 shadow-lg border-0 bg-white/80 backdrop-blur-sm">
         <CardContent className="pt-8 pb-8 text-center">
           <div className="flex justify-center mb-6">
-            <BrandLogo eager className="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-contain bg-white p-1 sm:p-1.5 border border-primary/20 text-base sm:text-lg" />
+            <BrandLogo eager size="md" />
           </div>
           <h1 className="text-4xl font-bold text-slate-900 mb-2">404</h1>
           <h2 className="text-xl font-semibold text-slate-700 mb-4">Page Not Found</h2>

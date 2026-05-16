@@ -97,7 +97,7 @@ export default function InstallAppPage() {
     <PublicLayout>
       <section className="container py-12 md:py-16 max-w-3xl">
         <div className="text-center mb-10">
-          <BrandLogo eager className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 mx-auto mb-4 rounded-full object-contain bg-white p-1.5 sm:p-2 border border-primary/20 text-lg sm:text-xl md:text-2xl" />
+          <BrandLogo eager size="xl" className="mx-auto mb-4" />
           <Badge className="mb-4 bg-primary/10 text-primary border-primary/30">Install the app</Badge>
           <h1 className="font-display text-3xl md:text-5xl font-bold text-foreground mb-3">
             Get Elparaiso on your device
